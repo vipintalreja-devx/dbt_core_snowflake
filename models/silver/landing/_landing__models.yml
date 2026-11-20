@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: slv_landing_partner_rate
+    description: "Loaded partner rate-card file rows, validated against brand master and rate card (ported from P3)."
+    columns:
+      - name: partner_brand_id
+        data_tests: [not_null]
+      - name: is_valid
+        data_tests:
+          - accepted_values:
+              arguments: {values: [true]}
+              config: {severity: warn}
+  - name: slv_landing_device_feed
+    description: "Vendor device JSON feed flattened to device x spec key, reconciled to the catalogue (ported from P4)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['device_id', 'spec_key']}
+    columns:
+      - name: device_id
+        data_tests: [not_null]

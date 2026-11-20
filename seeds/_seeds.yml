@@ -1,0 +1,7 @@
+version: 2
+seeds:
+  - name: sla_policy
+    description: "Care resolution SLA targets by ticket priority (business-owned, version-controlled)."
+    columns:
+      - name: priority
+        data_tests: [unique, not_null]

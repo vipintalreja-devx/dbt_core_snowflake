@@ -1,0 +1,270 @@
+version: 2
+
+# =============================================================================
+# SILVER LAYER - cleaned, conformed, deduplicated, typed. One model per business
+# entity/event. Rules applied here (once) instead of in every procedure:
+#   * timestamps -> *_utc + *_local (Asia/Manila) + event_date business day
+#   * dedup of re-delivered CDRs / invoices / rate-card versions
+#   * MSISDN normalisation to 63XXXXXXXXXX
+#   * unit fixes (drop-rate fraction -> %, NaN latency -> NULL, bytes -> MB)
+#   * secrets dropped (SIM AUTH_KEY, churn embeddings); PII confined to silver
+#   * test customers / soft-deleted lines flagged (is_reportable)
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------- core
+  - name: slv_customer
+    description: "Party master (contains PII - restricted to silver)."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+  - name: slv_account
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - relationships: {arguments: {to: ref('slv_customer'), field: customer_id}}
+  - name: slv_subscription
+    description: "Current state of every line, with is_reportable = not deleted and not a test customer."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('slv_account'), field: account_id}}
+      - name: plan_id
+        data_tests:
+          - relationships: {arguments: {to: ref('slv_plan'), field: plan_id}}
+      - name: status
+        data_tests:
+          - accepted_values: {arguments: {values: ['ACTIVE', 'SUSPENDED', 'CHURNED', 'PORTED_OUT', 'PENDING']}}
+      - name: msisdn
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments: {expression: "rlike '^639[0-9]{9}$'"}
+              config: {severity: warn}
+  - name: slv_subscription_status_history
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'valid_from_local']}
+  - name: slv_contract
+    columns:
+      - name: contract_id
+        data_tests: [unique, not_null]
+      - name: commitment_months
+        data_tests: [not_null]
+  - name: slv_customer_consent
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['customer_id', 'consent_type']}
+  - name: slv_service_instance
+    columns:
+      - name: service_instance_id
+        data_tests: [unique, not_null]
+  - name: slv_sim_inventory
+    columns:
+      - name: iccid
+        data_tests: [unique, not_null]
+
+  # ---------------------------------------------------------------- ref
+  - name: slv_region
+    columns:
+      - name: region_id
+        data_tests: [unique, not_null]
+      - name: region_name
+        data_tests: [not_null]
+  - name: slv_plan
+    columns:
+      - name: plan_id
+        data_tests: [unique, not_null]
+      - name: base_price_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: slv_device
+    columns:
+      - name: device_id
+        data_tests: [unique, not_null]
+  - name: slv_fx_rate
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['from_currency', 'to_currency', 'valid_from']}
+    columns:
+      - name: rate
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, inclusive: false}}
+  - name: slv_time_slot
+    columns:
+      - name: slot_id
+        data_tests: [unique, not_null]
+
+  # ---------------------------------------------------------------- usage
+  - name: slv_cdr_voice
+    description: "Voice CDRs - incremental (merge on call_id), re-processes var(lookback_days)."
+    columns:
+      - name: call_id
+        data_tests: [unique, not_null]
+      - name: event_date
+        data_tests: [not_null]
+      - name: duration_sec
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: call_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['MO', 'MT', 'FWD']}}
+  - name: slv_cdr_sms
+    columns:
+      - name: sms_id
+        data_tests: [unique, not_null]
+      - name: sms_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['P2P', 'A2P', 'PREMIUM']}}
+  - name: slv_cdr_data
+    columns:
+      - name: session_id
+        data_tests: [unique, not_null]
+      - name: data_mb
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: rat
+        data_tests:
+          - accepted_values: {arguments: {values: ['3G', '4G', '5G']}}
+  - name: slv_xdr_session
+    columns:
+      - name: record_id
+        data_tests: [unique, not_null]
+  - name: slv_roaming_usage
+    columns:
+      - name: usd_php_rate
+        description: "FX rate valid on the usage day (as-of join)."
+        data_tests:
+          - not_null:
+              config: {severity: warn}
+
+  # ---------------------------------------------------------------- billing
+  - name: slv_invoice
+    description: "Invoice headers, deduplicated on invoice_id."
+    columns:
+      - name: invoice_id
+        data_tests: [unique, not_null]
+      - name: invoice_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['PAID', 'UNPAID', 'OVERDUE']}}
+  - name: slv_invoice_line
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['invoice_id', 'line_no']}
+  - name: slv_payment
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+      - name: payment_amount_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: slv_adjustment
+    columns:
+      - name: adjustment_id
+        data_tests: [unique, not_null]
+      - name: credit_amount_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: slv_recharge
+    columns:
+      - name: recharge_id
+        data_tests: [unique, not_null]
+  - name: slv_daily_revenue
+    description: "Earned revenue, incremental by business_date (delete+insert)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'business_date', 'revenue_source']}
+    columns:
+      - name: revenue_source
+        data_tests:
+          - accepted_values: {arguments: {values: ['PLAN', 'RECHARGE', 'VAS', 'ROAMING']}}
+
+  # ---------------------------------------------------------------- care
+  - name: slv_ticket
+    columns:
+      - name: ticket_id
+        data_tests: [unique, not_null]
+      - name: priority
+        data_tests:
+          - accepted_values: {arguments: {values: ['P1', 'P2', 'P3', 'P4']}}
+          - relationships: {arguments: {to: ref('sla_policy'), field: priority}}
+  - name: slv_work_order
+    columns:
+      - name: work_order_id
+        data_tests: [unique, not_null]
+  - name: slv_nps_survey
+    columns:
+      - name: survey_id
+        data_tests: [unique, not_null]
+
+  # ---------------------------------------------------------------- network
+  - name: slv_cell_site
+    columns:
+      - name: cell_id
+        data_tests: [unique, not_null]
+  - name: slv_cell_kpi_hourly
+    description: "15-min PM counters rolled up to cell x local hour. drop_rate_pct is a PERCENT."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['cell_id', 'hour_local']}
+    columns:
+      - name: drop_rate_pct_avg
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: slv_cell_kpi_threshold
+    columns:
+      - name: cell_id
+        data_tests: [unique, not_null]
+  - name: slv_alarm_event
+    columns:
+      - name: alarm_id
+        data_tests: [unique, not_null]
+  - name: slv_outage_incident
+    columns:
+      - name: incident_id
+        data_tests: [unique, not_null]
+  - name: slv_ont_health_daily
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['ont_serial', 'event_date']}
+
+  # ---------------------------------------------------------------- marketing / partner
+  - name: slv_campaign
+    columns:
+      - name: campaign_id
+        data_tests: [unique, not_null]
+  - name: slv_campaign_response
+    columns:
+      - name: response_id
+        data_tests: [unique, not_null]
+  - name: slv_churn_score
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: churn_probability
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+  - name: slv_partner_brand
+    columns:
+      - name: partner_brand_id
+        data_tests: [unique, not_null]
+  - name: slv_partner_rate_card
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['partner_brand_id', 'service_type', 'unit', 'effective_from']}
+
+  # ---------------------------------------------------------------- intermediate
+  - name: int_subscriber_profile
+    description: "Conformed current profile per line - the single source for region/plan/brand/segment/churn band."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+  - name: int_subscriber_month_status
+    description: "Line status at BOM/EOM for each month, from BSS status history."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'subscription_id']}

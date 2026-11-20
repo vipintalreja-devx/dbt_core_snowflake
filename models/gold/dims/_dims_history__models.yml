@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: dim_contract_history
+    description: "SCD2 contract dimension over snap_contract_profile, with changed_attributes per version (ported from H01)."
+    columns:
+      - name: contract_version_key
+        data_tests: [unique, not_null]
+  - name: dim_subscriber_device_history
+    description: "SCD2 device/SIM dimension over snap_subscriber_device, classifying each change (ported from H02)."
+    columns:
+      - name: device_version_key
+        data_tests: [unique, not_null]
+      - name: change_type
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['INITIAL', 'ESIM_MIGRATION', 'UPGRADE_TO_5G', 'DEVICE_SWAP', 'SIM_SWAP', 'BRAND_MOVE', 'ATTRIBUTE_CHANGE']}
+  - name: dim_cell_config_history
+    description: "SCD2 cell configuration dimension over snap_cell_config (ported from H03)."
+    columns:
+      - name: cell_config_version_key
+        data_tests: [unique, not_null]
+      - name: config_compliance
+        data_tests:
+          - accepted_values: {arguments: {values: ['NEEDS_REVIEW', 'FIRMWARE_DRIFT', 'COMPLIANT']}}
+  - name: dim_account_profile_history
+    description: "SCD2 account profile dimension over snap_account_profile (ported from H04)."
+    columns:
+      - name: account_version_key
+        data_tests: [unique, not_null]
+  - name: dim_customer_tier
+    description: "Customer value tier from revenue, usage, care load and payment behaviour (ported from G3)."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: value_tier
+        data_tests:
+          - accepted_values: {arguments: {values: ['PLATINUM', 'GOLD', 'SILVER', 'BRONZE']}}
+  - name: dim_partner_rate
+    description: "In-force MVNO wholesale rate per brand/service/unit (ported from G4)."
+    columns:
+      - name: partner_rate_key
+        data_tests: [unique, not_null]

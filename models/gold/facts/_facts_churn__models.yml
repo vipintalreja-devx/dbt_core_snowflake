@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: fct_churn_risk
+    description: "Blended churn-risk score per line and score date with component breakdown (ported from G2)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'score_date']}
+    columns:
+      - name: risk_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+      - name: risk_band
+        data_tests:
+          - accepted_values: {arguments: {values: ['HIGH', 'MEDIUM', 'LOW']}}

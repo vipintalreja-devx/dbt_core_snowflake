@@ -1,0 +1,135 @@
+version: 2
+
+# =============================================================================
+# GOLD / ADVANCED  -  H13..H21 ported from telco_v2_core (PIPE_X.SP_X_H13..H21)
+# Each model now covers every period of the loaded window (var history_start_date)
+# instead of one run_date / run_month parameter, and reads silver/gold.
+# =============================================================================
+
+models:
+  - name: adv_value_tiers
+    description: "H13 - RFM value tiers per line and month (was Snowpark Python). Tier, tier movement, value score, LTV estimate, recommended action."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['value_month', 'subscription_id']}
+    columns:
+      - name: value_month
+        data_tests: [not_null]
+      - name: subscription_id
+        data_tests: [not_null]
+      - name: value_tier
+        data_tests:
+          - accepted_values: {arguments: {values: ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM']}}
+      - name: tier_movement
+        data_tests:
+          - accepted_values: {arguments: {values: ['NEW', 'UP', 'DOWN', 'SAME']}}
+
+  - name: adv_cell_anomaly
+    description: "H14 - daily cell KPI anomalies vs. own 29-day baseline (z-score + robust MAD z-score) with likely cause."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['kpi_date', 'cell_id']}
+    columns:
+      - name: anomaly_cause
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['OUTAGE_RELATED', 'EQUIPMENT_FAULT', 'CONGESTION', 'TRANSPORT_LATENCY', 'UNEXPLAINED', 'NORMAL']}
+
+  - name: adv_billing_close_invoice_totals
+    description: "H15 step 1 - invoice totals per close month and account (task-graph root)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['close_month', 'account_id']}
+    columns:
+      - name: account_id
+        data_tests: [not_null]
+
+  - name: adv_billing_close_payment_totals
+    description: "H15 step 2 - payments received within 45 days against each close month's invoices."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['close_month', 'account_id']}
+
+  - name: adv_billing_close
+    description: "H15 step 3 - billing close reconciliation per account and close month (billed, paid, credits by reason, late fees vs rule, dunning, balance, credit risk)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['close_month', 'account_id']}
+    columns:
+      - name: account_id
+        data_tests: [not_null]
+      - name: close_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['SETTLED', 'PARTIAL', 'UNPAID']}}
+      - name: credit_risk
+        data_tests:
+          - accepted_values: {arguments: {values: ['HIGH', 'MEDIUM', 'LOW']}}
+
+  - name: adv_subscription_current_scd1
+    description: "H16 - current wide subscription state (SCD1, MERGE + soft-delete post-hook)."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: lifecycle_state
+        data_tests:
+          - accepted_values: {arguments: {values: ['GONE', 'AT_RISK', 'DORMANT', 'HEALTHY']}}
+
+  - name: adv_customer_360_json
+    description: "H17 - one VARIANT customer-360 document per billed account and month, plus searchable flat columns."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['doc_month', 'account_id']}
+    columns:
+      - name: doc
+        data_tests: [not_null]
+      - name: next_best_action
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['RETENTION_CALL', 'SERVICE_FOLLOW_UP', 'COLLECTIONS', 'REFERRAL_OFFER', 'NONE']}
+
+  - name: adv_revenue_leakage_daily
+    description: "H18 - revenue assurance: rated (raw CDR/xDR evidence) vs booked revenue per line and Manila day, with leakage type."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['usage_date', 'subscription_id']}
+    columns:
+      - name: usage_date
+        data_tests: [not_null]
+      - name: leakage_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['UNKNOWN_SUBSCRIBER', 'DELETED_BUT_RATED', 'DUPLICATE_CDR', 'MEDIATION_FAILURE',
+                         'UNLI_CHARGED', 'MISSED_RATING', 'UNDER_BOOKED', 'OVER_BOOKED', 'OK']
+
+  - name: adv_churn_feature_store
+    description: "H19 - churn model features per line at each month end (population = ACTIVE at month end)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'feature_date']}
+    columns:
+      - name: feature_row_key
+        data_tests: [not_null]
+
+  - name: adv_dunning_journey
+    description: "H20 - collections journey per invoice matched with MATCH_RECOGNIZE, bucketed by month of first reminder."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['invoice_id', 'match_no']}
+    columns:
+      - name: outcome
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['CURED_AT_STAGE_1', 'CURED_AT_STAGE_2', 'CURED_AFTER_BARRING', 'PARTLY_PAID',
+                         'WRITTEN_DOWN', 'BARRED_UNPAID', 'IN_PROGRESS']
+
+  - name: adv_cell_hourly_state
+    description: "H21 - cell daily state from its 24-hour profile (dynamic table): day-part pivots, degraded episodes, flips, alarms by severity."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['kpi_date', 'cell_id']}
+    columns:
+      - name: day_state
+        data_tests:
+          - accepted_values: {arguments: {values: ['CHRONIC', 'SUSTAINED', 'FLAPPING', 'INTERMITTENT', 'STABLE']}}

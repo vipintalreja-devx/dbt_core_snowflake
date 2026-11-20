@@ -1,0 +1,203 @@
+version: 2
+
+# =============================================================================
+# GOLD / ANALYTICS - ported from telco_v2_core medium models (PIPE_X.SP_X_Mxx).
+# Rebuilt on silver + gold, processed over the whole history window instead of a
+# single run_date / run_month parameter.
+# =============================================================================
+
+models:
+  - name: anl_revenue_daily_by_plan
+    description: "Daily earned revenue per plan and stream (M01)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['business_date', 'plan_id', 'revenue_source']}
+  - name: anl_region_voice_daily
+    description: "Voice traffic per serving region per day (M02)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['event_date', 'serving_region_name']}
+  - name: anl_region_data_daily
+    description: "Data traffic per region and RAT per day, with 5G coverage-gap share (M03)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['event_date', 'serving_region_name', 'rat']}
+  - name: anl_account_collection_monthly
+    description: "Collections per account and billing month (M05)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['account_id', 'billing_month']}
+    columns:
+      - name: collection_segment
+        data_tests:
+          - accepted_values: {arguments: {values: ['BARRED', 'HIGH_RISK', 'OPEN', 'PAID_LATE', 'GOOD_STANDING']}}
+      - name: collection_rate
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}, config: {severity: warn}}
+  - name: anl_technician_monthly
+    description: "Field technician productivity per month (M07)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['technician_id', 'work_month']}
+  - name: anl_appointment_adherence_monthly
+    description: "Appointment slot adherence (M08)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['slot_month', 'region_name', 'slot_label']}
+  - name: anl_campaign_conversion_monthly
+    description: "Campaign funnel and revenue uplift (M09)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['send_month', 'campaign_id']}
+  - name: anl_churn_band_region
+    description: "Churn-risk exposure by region and band (M10)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['region_name', 'churn_band', 'contract_type']}
+  - name: anl_segment_transition_monthly
+    description: "Marketing segment migration matrix (M11)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'from_segment', 'to_segment']}
+  - name: anl_device_mix_region
+    description: "Device mix of the active base (M12)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['region_name', 'manufacturer', 'supports_5g']}
+  - name: anl_partner_revenue_monthly
+    description: "MVNO partner economics per month (M13)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['partner_brand_id', 'revenue_month']}
+  - name: anl_roaming_fx_check_monthly
+    description: "Roaming re-rating at as-of FX vs billed (M14)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['usage_month', 'visited_country']}
+  - name: anl_recharge_plan_monthly
+    description: "Prepaid recharge behaviour per plan and pack (M15)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['recharge_month', 'plan_id', 'pack_code']}
+  - name: anl_kpi_breach_daily
+    description: "Hourly KPI threshold breaches per cell and KPI (M16)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['event_date', 'cell_id', 'kpi_name']}
+    columns:
+      - name: kpi_name
+        data_tests:
+          - accepted_values: {arguments: {values: ['AVG_THROUGHPUT', 'DROP_CALL_RATE', 'LATENCY', 'PRB_UTILIZATION']}}
+  - name: anl_outage_credit_monthly
+    description: "Outage SLA credit owed vs granted (M17)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['outage_month', 'account_id']}
+    columns:
+      - name: credit_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['NOT_CREDITED', 'UNDER_CREDITED', 'OVER_CREDITED', 'CREDITED']}}
+  - name: anl_ont_health_node_daily
+    description: "FTTH ONT optical health rolled up to cabinet (M18)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['event_date', 'cabinet_node_id']}
+  - name: anl_ftth_node_utilization_monthly
+    description: "FTTH node utilisation at month end (M19)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_end', 'node_id']}
+    columns:
+      - name: node_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['SPLITTER', 'CABINET', 'OLT']}}
+  - name: anl_late_fee_recalc
+    description: "Late fee recomputation vs charged (M20)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['invoice_id', 'assessment_date']}
+  - name: anl_xdr_events
+    description: "Flattened xDR signalling events (M21)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['record_id', 'event_pos']}
+  - name: anl_nps_answers_monthly
+    description: "NPS and survey drivers (M22)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['response_month', 'survey_version', 'region_name', 'survey_type']}
+    columns:
+      - name: nps
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: -100, max_value: 100}}
+  - name: anl_device_specs
+    description: "Device spec catalogue from SPECS JSON (M23)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['device_id']}
+    columns:
+      - name: capability_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: anl_kyc_verification
+    description: "KYC / SIM registration quality (M24)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['doc_type', 'verified_by', 'liveness_band', 'island_group']}
+  - name: anl_campaign_targeting
+    description: "Campaign targeting per region sized against the base (M25)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['campaign_id', 'region_id']}
+  - name: anl_sms_hourly
+    description: "SMS traffic per hour (M26)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['hour_local', 'sms_type', 'is_roaming']}
+  - name: anl_payment_daily_channel
+    description: "Daily cash collection by channel (M29)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['payment_date', 'payment_channel', 'payment_method']}
+  - name: anl_ticket_backlog
+    description: "Open ticket backlog - dynamic table (M30)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['category', 'priority', 'open_month']}
+  - name: anl_cell_daily_dt
+    description: "Cell day KPIs - dynamic table (M31)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['cell_id', 'event_date']}
+  - name: anl_arpu_region_tier_monthly
+    description: "Regional ARPU vs national tiering (M32)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['revenue_month', 'region_name']}
+    columns:
+      - name: arpu_tier
+        data_tests:
+          - accepted_values: {arguments: {values: ['ABOVE_NATIONAL', 'AT_NATIONAL', 'BELOW_NATIONAL']}}
+  - name: anl_data_quality_daily
+    description: "Daily data-quality scorecard (M33)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['check_date', 'check_name']}
+    columns:
+      - name: status
+        data_tests:
+          - accepted_values: {arguments: {values: ['PASS', 'WARN', 'FAIL']}}
+  - name: anl_contract_renewal_candidates
+    description: "Contract renewal retention work-list (M36)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['run_month', 'contract_id']}
+    columns:
+      - name: recommended_action
+        data_tests:
+          - accepted_values: {arguments: {values: ['COLLECT_BEFORE_RENEW', 'FIX_SERVICE_THEN_RENEW', 'RETENTION_OFFER', 'RENEWAL_CALL', 'AUTO_RENEW_NOTICE']}}
+  - name: anl_customer_demographics
+    description: "Customer demographics (M37)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['age_band', 'gender', 'preferred_language', 'island_group']}

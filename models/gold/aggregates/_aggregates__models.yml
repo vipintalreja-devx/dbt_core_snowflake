@@ -1,0 +1,469 @@
+version: 2
+
+# GOLD / AGGREGATES - ported from telco_v2_core easy models x_e01..x_e29 (PIPE_X.SP_X_E01..E29).
+# Each procedure computed ONE day/month per CALL; these maintain the whole history window.
+
+models:
+  - name: agg_recharge_daily_channel
+    description: "E01 - prepaid top-ups per day x channel x pack x home region (share of day, DoD, 7-day avg, busy hour)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, recharge_channel, pack_code, home_region_name]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: recharge_channel
+        data_tests: [not_null]
+      - name: pack_code
+        data_tests: [not_null]
+      - name: home_region_name
+        data_tests: [not_null]
+      - name: amount_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_payment_daily_method
+    description: "E02 - cash collected per day x channel x method, punctuality vs due date, amount by island (OBJECT_AGG)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [payment_date, payment_channel, payment_method]}
+    columns:
+      - name: payment_date
+        data_tests: [not_null]
+      - name: payment_channel
+        data_tests: [not_null]
+      - name: payment_method
+        data_tests: [not_null]
+      - name: amount_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: late_payment_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_invoice_status_monthly
+    description: "E03 - invoices per billing month x status x region with collection rate and MoM."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [billing_month, invoice_status, region_name]}
+    columns:
+      - name: billing_month
+        data_tests: [not_null]
+      - name: invoice_status
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: invoices
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_adjustment_reason_monthly
+    description: "E04 - credits per month x reason x region with outage context for OUTAGE_CREDIT."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [adjustment_month, reason_code, region_name]}
+    columns:
+      - name: adjustment_month
+        data_tests: [not_null]
+      - name: reason_code
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: credit_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_dunning_stage_daily
+    description: "E05 - dunning actions per day x stage x action x region with cure rate."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [action_date, dunning_stage, dunning_action, region_name]}
+    columns:
+      - name: action_date
+        data_tests: [not_null]
+      - name: dunning_stage
+        data_tests: [not_null]
+      - name: dunning_action
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: cure_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_late_fee_daily
+    description: "E06 - late fees per day x rule x region vs fee implied by the rule table."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [assessment_date, rule_code, region_name]}
+    columns:
+      - name: assessment_date
+        data_tests: [not_null]
+      - name: rule_code
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: fee_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_ticket_open_daily
+    description: "E07 - tickets opened per day x channel x category x priority x region with SLA attainment."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [opened_date, channel, category, priority, region_name]}
+    columns:
+      - name: opened_date
+        data_tests: [not_null]
+      - name: channel
+        data_tests: [not_null]
+      - name: category
+        data_tests: [not_null]
+      - name: priority
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: sla_attainment_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_nps_daily
+    description: "E08 - NPS per day x region x brand, driver scores, 7-day NPS."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [response_date, region_name, brand_name]}
+    columns:
+      - name: response_date
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: brand_name
+        data_tests: [not_null]
+      - name: nps
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: -100, max_value: 100}}
+  - name: agg_work_order_outcome_daily
+    description: "E09 - completed field work orders per day x type x outcome x technician region."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [completed_date, work_type, outcome, region_name]}
+    columns:
+      - name: completed_date
+        data_tests: [not_null]
+      - name: work_type
+        data_tests: [not_null]
+      - name: outcome
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: first_time_fix_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_campaign_response_daily
+    description: "E10 - campaign sends/opens/conversions per day x campaign, audience by segment (OBJECT_AGG)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, campaign_id]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: campaign_id
+        data_tests: [not_null]
+      - name: open_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_new_accounts_daily
+    description: "E11 - new accounts per day x payment method x paperless, cohort line survival (full history)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [created_date, payment_method, is_paperless_billing]}
+    columns:
+      - name: created_date
+        data_tests: [not_null]
+      - name: payment_method
+        data_tests: [not_null]
+      - name: is_paperless_billing
+        data_tests: [not_null]
+      - name: accounts
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_sim_inventory_snapshot
+    description: "E12 - current SIM stock per type x status x region with stock ageing."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [sim_type, sim_status, region_name]}
+    columns:
+      - name: sim_type
+        data_tests: [not_null]
+      - name: sim_status
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: sims
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_contract_expiry_monthly
+    description: "E13 - contracts ending per month x type x auto-renew x churn band; revenue at risk."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [end_month, contract_type, is_auto_renew, churn_band]}
+    columns:
+      - name: end_month
+        data_tests: [not_null]
+      - name: contract_type
+        data_tests: [not_null]
+      - name: is_auto_renew
+        data_tests: [not_null]
+      - name: churn_band
+        data_tests: [not_null]
+      - name: contracts
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_consent_snapshot
+    description: "E14 - current consent coverage per type x channel (FLATTEN) x age band."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [consent_type, channel, age_band]}
+    columns:
+      - name: consent_type
+        data_tests: [not_null]
+      - name: channel
+        data_tests: [not_null]
+      - name: age_band
+        data_tests: [not_null]
+      - name: granted_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_roaming_daily_country
+    description: "E15 - roaming per day x country x operator with FX variance of billed PHP."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, visited_country, partner_operator]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: visited_country
+        data_tests: [not_null]
+      - name: partner_operator
+        data_tests: [not_null]
+      - name: roamers
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_sms_daily_type
+    description: "E16 - SMS per day x type x roaming x serving region with busy hour (TIME_SLICE)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, sms_type, is_roaming, region_name]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: sms_type
+        data_tests: [not_null]
+      - name: is_roaming
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: sms
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_voice_daily_type
+    description: "E17 - voice per day x call type x roaming x region: peak share, short-call ratio, p95 duration."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, call_type, is_roaming, region_name]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: call_type
+        data_tests: [not_null]
+      - name: is_roaming
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: short_call_ratio_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+      - name: peak_minutes_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: agg_data_daily_rat
+    description: "E18 - data per day x RAT x APN x region incl. 5G devices on legacy RATs."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, rat, apn, region_name]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: rat
+        data_tests: [not_null]
+      - name: apn
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: data_gb
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_usage_daily_totals
+    description: "E19 - usage + revenue per day x region reconciled to legacy USAGE_DAILY_AGG."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, region_name]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: region_name
+        data_tests: [not_null]
+      - name: active_lines
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_alarm_severity_daily
+    description: "E20 - alarms per day x severity x code x vendor with clearance times and top regions."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, severity, alarm_code, vendor]}
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: severity
+        data_tests: [not_null]
+      - name: alarm_code
+        data_tests: [not_null]
+      - name: vendor
+        data_tests: [not_null]
+      - name: alarms
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_outage_monthly
+    description: "E21 - outages per month x severity x cause x island: MTTR, impact, credit exposure."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [detected_month, severity, root_cause, island_group]}
+    columns:
+      - name: detected_month
+        data_tests: [not_null]
+      - name: severity
+        data_tests: [not_null]
+      - name: root_cause
+        data_tests: [not_null]
+      - name: island_group
+        data_tests: [not_null]
+      - name: incidents
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_element_firmware_snapshot
+    description: "E22 - network elements per type x vendor x firmware: fault rate and latest-version flag."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [element_type, vendor, firmware_version]}
+    columns:
+      - name: element_type
+        data_tests: [not_null]
+      - name: vendor
+        data_tests: [not_null]
+      - name: firmware_version
+        data_tests: [not_null]
+      - name: elements
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_port_status_snapshot
+    description: "E23 - ports per type x admin x oper status x vendor: capacity, optical health."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [port_type, admin_status, oper_status, vendor]}
+    columns:
+      - name: port_type
+        data_tests: [not_null]
+      - name: admin_status
+        data_tests: [not_null]
+      - name: oper_status
+        data_tests: [not_null]
+      - name: vendor
+        data_tests: [not_null]
+      - name: ports
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_device_catalog_summary
+    description: "E24 - device catalogue per maker x type with installed base and 5G capability."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [manufacturer, device_type]}
+    columns:
+      - name: manufacturer
+        data_tests: [not_null]
+      - name: device_type
+        data_tests: [not_null]
+      - name: models
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_plan_active_daily
+    description: "E25 - plans on sale per day x contract type x internet service with base on them."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [as_of_date, contract_type, internet_service]}
+    columns:
+      - name: as_of_date
+        data_tests: [not_null]
+      - name: contract_type
+        data_tests: [not_null]
+      - name: internet_service
+        data_tests: [not_null]
+      - name: plans
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_fx_rate_daily
+    description: "E26 - daily FX (ASOF carried forward) with DoD move and 30-day volatility."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [rate_date, from_currency, to_currency]}
+    columns:
+      - name: rate_date
+        data_tests: [not_null]
+      - name: from_currency
+        data_tests: [not_null]
+      - name: to_currency
+        data_tests: [not_null]
+      - name: rate
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_partner_settlement_monthly
+    description: "E27 - MVNO settlements per month x brand x status: effective vs contractual share, USD value."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [settlement_month, brand_name, settlement_status]}
+    columns:
+      - name: settlement_month
+        data_tests: [not_null]
+      - name: brand_name
+        data_tests: [not_null]
+      - name: settlement_status
+        data_tests: [not_null]
+      - name: share_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: agg_ticket_status_changes_daily
+    description: "E28 - ticket status transitions per day with dwell time and re-opens."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [change_date, from_status, status, changed_by, priority]}
+    columns:
+      - name: change_date
+        data_tests: [not_null]
+      - name: from_status
+        data_tests: [not_null]
+      - name: status
+        data_tests: [not_null]
+      - name: changed_by
+        data_tests: [not_null]
+      - name: priority
+        data_tests: [not_null]
+      - name: changes
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+  - name: agg_xdr_parse_status_daily
+    description: "E29 - mediation feed health per receive day x source x parse status vs silver coverage."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [received_date, source_system, parse_status]}
+    columns:
+      - name: received_date
+        data_tests: [not_null]
+      - name: source_system
+        data_tests: [not_null]
+      - name: parse_status
+        data_tests: [not_null]
+      - name: records
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}

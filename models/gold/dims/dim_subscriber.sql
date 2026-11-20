@@ -1,0 +1,48 @@
+{{ config(
+    materialized='table',
+    schema='gold',
+    tags=['gold', 'dims', 'dimension'],
+    transient=false,
+    copy_grants=true,
+    post_hook="alter table {{ this }} set comment = 'Gold dimension - dim_subscriber (rebuilt {{ run_started_at.strftime(\'%Y-%m-%d %H:%M\') }} UTC)'"
+) }}
+-- Current (SCD1) subscriber dimension. MSISDN is masked; full history is in dim_subscriber_history.
+select
+    subscription_id,
+    account_id,
+    customer_id,
+    {{ mask_msisdn('msisdn') }}                             as msisdn_masked,
+    sha2(msisdn, 256)                                       as msisdn_hash,
+    status,
+    activation_date,
+    deactivation_date,
+    tenure_months,
+    case when tenure_months < 6 then '0-5m' when tenure_months < 12 then '6-11m'
+         when tenure_months < 24 then '12-23m' when tenure_months < 48 then '24-47m' else '48m+' end as tenure_band,
+    monthly_charges_php,
+    plan_id,
+    plan_name,
+    contract_type,
+    commitment_months,
+    plan_category,
+    internet_service,
+    home_cell_id,
+    home_region_id,
+    home_region_name,
+    island_group,
+    device_id,
+    device_manufacturer,
+    device_supports_5g,
+    partner_brand_id,
+    brand_name,
+    is_mvno_line,
+    contract_id,
+    contract_end_date,
+    contract_auto_renew,
+    segment_code,
+    churn_probability,
+    churn_band,
+    is_deleted,
+    is_test,
+    is_reportable
+from {{ ref('int_subscriber_profile') }}

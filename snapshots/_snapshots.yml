@@ -1,0 +1,27 @@
+version: 2
+
+snapshots:
+  - name: snap_subscription
+    description: "SCD2 of the line's commercial attributes (plan, status, home cell, device, brand)."
+  - name: snap_plan_catalog
+    description: "SCD2 price book."
+  - name: snap_contract_profile
+    description: "SCD2 contract profile (lifecycle stage, plan, price band, payment, brand, region, churn band). Ported from H01."
+    columns:
+      - name: contract_id
+        data_tests: [not_null]
+  - name: snap_subscriber_device
+    description: "SCD2 device / SIM / brand / network-fit profile per line. Ported from H02."
+    columns:
+      - name: subscription_id
+        data_tests: [not_null]
+  - name: snap_cell_config
+    description: "SCD2 cell configuration (timestamp strategy on config_updated_at). Ported from H03."
+    columns:
+      - name: cell_id
+        data_tests: [not_null]
+  - name: snap_account_profile
+    description: "SCD2 account billing/relationship profile on banded attributes. Ported from H04."
+    columns:
+      - name: account_id
+        data_tests: [not_null]

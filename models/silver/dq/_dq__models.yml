@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: dq_ip_address_validation
+    description: "Element management-IP quality and regional pool membership (ported from T01)."
+    columns:
+      - name: element_id
+        data_tests: [unique, not_null]
+      - name: ip_class
+        data_tests:
+          - not_null
+          - accepted_values: {arguments: {values: ['IPV4', 'IPV6', 'INVALID', 'MISSING', 'EMPTY']}}
+  - name: dq_unit_profile
+    description: "KPI threshold unit-value profile and convertibility (ported from T02)."
+    columns:
+      - name: unit
+        data_tests: [unique]
+  - name: dq_ip_pool_utilization
+    description: "IP pool capacity, CIDR validity and exhaustion risk (ported from T04)."
+    columns:
+      - name: pool_id
+        data_tests: [unique, not_null]
+      - name: capacity_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['EXHAUSTED', 'AT_RISK', 'HEALTHY', 'UNDERUSED']}}
+  - name: dq_threshold_unit_conversion
+    description: "Thresholds converted via the unit-conversion reference with round-trip checks (ported from T05)."
+    columns:
+      - name: is_round_trip_ok
+        data_tests:
+          - accepted_values:
+              arguments: {values: [true]}
+              config: {severity: warn}

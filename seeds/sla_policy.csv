@@ -1,0 +1,5 @@
+priority,resolution_sla_hours,description
+P1,4,Critical - total service loss / VIP
+P2,24,High - degraded service
+P3,72,Medium - single feature / billing query
+P4,120,Low - information request

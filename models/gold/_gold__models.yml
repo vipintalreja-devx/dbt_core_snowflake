@@ -1,0 +1,182 @@
+version: 2
+
+# =============================================================================
+# GOLD LAYER - star schema (dims + facts) and governed business marts.
+# Every KPI has exactly one definition here (ARPU, churn, AR aging, SLA ...).
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------- dimensions
+  - name: dim_date
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+  - name: dim_region
+    columns:
+      - name: region_id
+        data_tests: [unique, not_null]
+  - name: dim_plan
+    columns:
+      - name: plan_id
+        data_tests: [unique, not_null]
+  - name: dim_device
+    columns:
+      - name: device_id
+        data_tests: [unique, not_null]
+  - name: dim_cell
+    columns:
+      - name: cell_id
+        data_tests: [unique, not_null]
+  - name: dim_partner
+    columns:
+      - name: partner_brand_id
+        data_tests: [unique, not_null]
+  - name: dim_customer
+    description: "Analyst-safe customer dimension - no direct identifiers."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+  - name: dim_account
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+  - name: dim_subscriber
+    description: "Current subscriber dimension (SCD1). MSISDN masked + hashed."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: home_region_name
+        data_tests: [not_null]
+      - name: churn_band
+        data_tests:
+          - accepted_values: {arguments: {values: ['HIGH', 'MEDIUM', 'LOW']}}
+  - name: dim_subscriber_history
+    description: "SCD2 subscriber history built from snapshot snap_subscription."
+    columns:
+      - name: subscriber_version_key
+        data_tests: [unique, not_null]
+  - name: dim_campaign
+    columns:
+      - name: campaign_id
+        data_tests: [unique, not_null]
+  - name: dim_technician
+    columns:
+      - name: technician_id
+        data_tests: [unique, not_null]
+
+  # ---------------------------------------------------------------- facts
+  - name: fct_subscriber_usage_daily
+    description: "Line x day network usage (voice, SMS, data). Incremental by event_date."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'event_date']}
+    columns:
+      - name: subscription_id
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_subscriber'), field: subscription_id}
+              config: {severity: warn}
+  - name: fct_revenue_daily
+    description: "Line x day earned revenue by stream. Incremental by business_date."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'business_date']}
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "abs(total_revenue_php - (plan_revenue_php + recharge_revenue_php + vas_revenue_php + roaming_revenue_php)) < 0.01"
+  - name: fct_recharge
+    columns:
+      - name: recharge_id
+        data_tests: [unique, not_null]
+  - name: fct_invoice
+    columns:
+      - name: invoice_id
+        data_tests: [unique, not_null]
+      - name: account_id
+        data_tests:
+          - relationships:
+              arguments: {to: ref('dim_account'), field: account_id}
+              config: {severity: warn}
+  - name: fct_payment
+    columns:
+      - name: payment_id
+        data_tests: [unique, not_null]
+  - name: fct_ticket
+    columns:
+      - name: ticket_id
+        data_tests: [unique, not_null]
+      - name: resolution_sla_hours
+        data_tests: [not_null]
+  - name: fct_work_order
+    columns:
+      - name: work_order_id
+        data_tests: [unique, not_null]
+  - name: fct_cell_kpi_daily
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['cell_id', 'event_date']}
+    columns:
+      - name: pm_completeness
+        description: "Share of the 96 expected 15-min PM intervals received (data-completeness KPI)."
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments: {min_value: 0, max_value: 1.05}
+              config: {severity: warn}
+  - name: fct_outage
+    columns:
+      - name: incident_id
+        data_tests: [unique, not_null]
+  - name: fct_campaign_response
+    columns:
+      - name: response_id
+        data_tests: [unique, not_null]
+  - name: fct_subscriber_monthly
+    description: "Line x month KPI base: status movement, usage, revenue, recharges, care contacts."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'month_start']}
+
+  # ---------------------------------------------------------------- marts
+  - name: mart_arpu_monthly
+    description: "GOVERNED ARPU = earned revenue / average billable base ((BOM+EOM)/2), by region and contract type."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'region_name', 'contract_type']}
+  - name: mart_churn_monthly
+    description: "GOVERNED CHURN: opening base, gross adds, churn, closing base, churn rate."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'region_name', 'contract_type']}
+    columns:
+      - name: churn_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: mart_revenue_assurance_monthly
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['account_id', 'billing_month']}
+    columns:
+      - name: recon_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['LINE_MISMATCH', 'EARNED_MISMATCH', 'OPEN_BALANCE', 'RECONCILED']}}
+  - name: mart_ar_aging_monthly
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_end', 'aging_bucket']}
+  - name: mart_care_sla_daily
+  - name: mart_network_quality_daily
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['event_date', 'region_id']}
+  - name: mart_partner_settlement_monthly
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'partner_brand_id']}
+  - name: mart_subscriber_360
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: next_best_action
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['SERVICE_RECOVERY', 'COLLECTIONS_RISK', 'RENEWAL_OFFER', 'RETENTION_CALL', 'NONE']}

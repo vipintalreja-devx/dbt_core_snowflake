@@ -1,0 +1,194 @@
+version: 2
+
+# =============================================================================
+# BRONZE LAYER
+# The operational schemas of TELCO_PROD_XL_V2 are the bronze layer: raw,
+# source-system-shaped data landed by ingestion (BSS, OSS, mediation, CRM).
+# dbt never copies bronze - silver reads it directly (zero-copy).
+# Timestamp storage conventions are documented per column (meta.tz) because
+# they differ by feed and drive the conversion macro used in silver.
+# =============================================================================
+
+sources:
+  - name: core
+    description: "CRM / BSS master data: customers, accounts, subscriptions, contracts, SIMs, service instances."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: CORE
+    tables:
+      - name: customer
+        description: "Party master. Contains PII (FULL_NAME, DATE_OF_BIRTH, NATIONAL_ID_HASH, KYC_PAYLOAD)."
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+      - name: account
+        columns:
+          - name: account_id
+            data_tests: [unique, not_null]
+      - name: subscription
+        description: "One row per mobile/fixed line (current state). IS_DELETED = soft delete."
+        columns:
+          - name: subscription_id
+            data_tests: [unique, not_null]
+          - name: activated_at
+            config: {meta: {tz: "TIMESTAMP_TZ"}}
+      - name: subscription_status_history
+        description: "Status SCD2 history (VALID_FROM/VALID_TO are Manila local NTZ)."
+        columns:
+          - name: valid_from
+            config: {meta: {tz: "NTZ local"}}
+      - name: contract
+      - name: customer_consent
+      - name: service_instance
+      - name: service_address
+      - name: sim_inventory
+
+  - name: ref
+    description: "Reference data: plans, regions, devices, FX rates, time slots."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: REF
+    tables:
+      - name: plan_catalog
+        columns:
+          - name: plan_id
+            data_tests: [unique, not_null]
+      - name: plan_feature
+      - name: geo_region
+      - name: device_catalog
+      - name: currency_rate
+      - name: time_slot
+      - name: status_code
+      - name: geo_zip_population
+
+  - name: usage
+    description: "Mediation output: rated CDRs / xDRs (2B+ rows). Loaded continuously; INGESTED_AT is the load timestamp."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: USAGE
+    config:
+      loaded_at_field: "ingested_at"
+      freshness:
+        warn_after: {count: 1, period: day}
+    tables:
+      - name: cdr_voice
+        columns:
+          - name: call_start
+            config: {meta: {tz: "TIMESTAMP_TZ (mixed offsets)"}}
+      - name: cdr_sms
+        columns:
+          - name: sent_at
+            config: {meta: {tz: "TIMESTAMP_TZ"}}
+      - name: cdr_data
+        columns:
+          - name: session_start
+            config: {meta: {tz: "NTZ in UTC"}}
+      - name: xdr_mediation_raw
+        description: "Raw xDR JSON from Huawei/Ericsson/Nokia mediation. PARSE_STATUS in (OK, PARTIAL, FAILED)."
+        config:
+          loaded_at_field: "received_at"
+      - name: roaming_usage
+        description: "TAP roaming records, charged in USD and PHP."
+        config:
+          freshness: null
+      - name: usage_daily_agg
+        description: "Legacy pre-aggregated usage. Not used by dbt - silver recomputes from CDRs."
+        config:
+          freshness: null
+
+  - name: billing
+    description: "Billing & revenue: invoices, payments, adjustments, prepaid recharges, revenue assurance feed."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: BILLING
+    tables:
+      - name: invoice
+        description: "Known issue: INVOICE_ID G0000000101 is duplicated - silver dedups."
+      - name: invoice_line
+      - name: payment
+        columns:
+          - name: payment_id
+            data_tests: [unique, not_null]
+      - name: adjustment
+        description: "Credits; AMOUNT is stored negative."
+      - name: recharge
+        columns:
+          - name: recharged_at
+            config: {meta: {tz: "NTZ local (Manila)"}}
+      - name: daily_revenue
+        description: "Earned revenue per subscription per business day per source (PLAN, RECHARGE, VAS, ROAMING). ~790M rows."
+      - name: dunning_event
+      - name: late_fee_assessment
+      - name: late_fee_rule
+
+  - name: care
+    description: "Customer care: tickets, status history, field work orders, NPS."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: CARE
+    tables:
+      - name: ticket
+        columns:
+          - name: ticket_id
+            data_tests: [unique, not_null]
+      - name: ticket_status_history
+      - name: work_order
+      - name: work_order_appointment
+      - name: field_technician
+      - name: nps_survey
+
+  - name: network
+    description: "OSS / network performance: cells, elements, 15-min KPIs, alarms, outages, FTTH topology."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: NETWORK
+    tables:
+      - name: cell_site
+        columns:
+          - name: cell_id
+            data_tests: [unique, not_null]
+      - name: cell_performance_15min
+        columns:
+          - name: interval_start
+            config: {meta: {tz: "NTZ in UTC"}}
+      - name: cell_kpi_threshold
+      - name: alarm_event
+      - name: outage_incident
+      - name: outage_impact
+      - name: network_element
+      - name: ne_port_inventory
+      - name: ftth_topology
+      - name: ont_telemetry
+
+  - name: marketing
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: MARKETING
+    tables:
+      - name: campaign
+      - name: campaign_response
+      - name: churn_score
+        description: "Output of the data-science churn model (latest scoring run)."
+      - name: churn_features
+      - name: segment_membership
+
+  - name: partner
+    description: "MVNO wholesale partners: brands, rate cards, subscriber map, settlements."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: PARTNER
+    tables:
+      - name: partner_brand
+      - name: partner_rate_card
+      - name: partner_subscriber_map
+      - name: partner_settlement
+
+  - name: landing
+    description: "File-based landing zone (COPY INTO targets): device feed JSON, partner rate CSVs."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: LANDING
+    tables:
+      - name: device_feed_raw
+      - name: partner_rate_raw
+
+  - name: ext
+    description: "Reference/network tables that exist only in the DBT_V2_RAW extract (IP pools, unit conversions)."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: DBT_V2_RAW
+    tables:
+      - name: ip_pool
+        identifier: NETWORK_IP_POOL
+      - name: unit_conversion
+        identifier: REF_UNIT_CONVERSION

@@ -1,0 +1,64 @@
+name: 'telco'
+version: '1.0.0'
+config-version: 2
+profile: 'my_project'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Business timezone: all event_date / *_local columns are Asia/Manila business days.
+  local_tz: 'Asia/Manila'
+  # First business date loaded into incremental silver/gold models on a full refresh.
+  # dev default keeps XS-warehouse builds fast; prod sets this to '2023-10-01' (full history).
+  history_start_date: '2026-08-01'
+  # Days re-processed on every incremental run to absorb late-arriving CDRs/revenue.
+  lookback_days: 3
+  # Churn-risk banding thresholds (single governed definition)
+  churn_high_threshold: 0.7
+  churn_medium_threshold: 0.4
+
+models:
+  telco:
+    +query_tag: 'dbt_telco'
+    +persist_docs: {relation: true, columns: true}
+    silver:
+      +schema: silver
+      +materialized: table
+      +tags: ['silver']
+      intermediate:
+        +materialized: view
+      dq:
+        +tags: ['silver', 'dq']
+      landing:
+        +tags: ['silver', 'landing']
+    gold:
+      +schema: gold
+      +materialized: table
+      +tags: ['gold']
+      aggregates:
+        +tags: ['gold', 'aggregates']
+      analytics:
+        +tags: ['gold', 'analytics']
+      advanced:
+        +tags: ['gold', 'advanced']
+
+snapshots:
+  telco:
+    +target_schema: dbt_telco_snapshots
+
+seeds:
+  telco:
+    +schema: silver
+    +tags: ['seed']
+
+data_tests:
+  telco:
+    +severity: error
+    +store_failures: false

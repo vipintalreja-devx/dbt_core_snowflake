@@ -1,0 +1,153 @@
+version: 2
+
+# =============================================================================
+# GOLD / ADVANCED (H05-H12) - analytical models ported from telco_v2_core
+# (originally PIPE_X.SP_X_H05..H12 stored procedures). They read silver/gold
+# (bronze only where silver has no equivalent) and process the whole reporting
+# window instead of one run_date / run_month parameter.
+# =============================================================================
+
+models:
+  - name: adv_subscriber_journey
+    description: >
+      Subscriber status journeys (MATCH_RECOGNIZE over status history: win-back, lost after
+      suspend, recovered, direct churn) ending in each month, enriched with revenue, usage
+      trend, tickets, NPS, churn score, segment, recharges, dunning and outages, plus a
+      likely-driver rule and a risk signal score. Ported from x_h05.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['subscription_id', 'journey_start']}
+    columns:
+      - name: journey_key
+        data_tests: [unique, not_null]
+      - name: journey_month
+        data_tests: [not_null]
+      - name: journey_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: ['WIN_BACK_AFTER_CHURN', 'LOST_AFTER_SUSPEND', 'RECOVERED_FROM_SUSPEND', 'DIRECT_CHURN']}
+      - name: likely_driver
+        data_tests: [not_null]
+
+  - name: adv_data_sessions
+    description: >
+      Data records grouped into visits (30-minute idle gap, CONDITIONAL_TRUE_EVENT) per
+      subscriber and Manila day, with voice/SMS/xDR activity inside the visit, cell
+      congestion (TIME_SLICE-aligned 15-min KPIs), plan/device context and 30-day baseline.
+      Rolling day window (var adv_daily_days). Ported from x_h06.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['session_date', 'subscription_id', 'visit_no']}
+    columns:
+      - name: visit_key
+        data_tests: [not_null]
+      - name: session_date
+        data_tests: [not_null]
+      - name: data_mb
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: experience
+        data_tests:
+          - accepted_values: {arguments: {values: ['POOR', 'DEGRADED', 'NO_KPI', 'GOOD']}}
+
+  - name: adv_roaming_fx_asof
+    description: >
+      Monthly roaming usage converted at the as-of USD/PHP rate (ASOF JOIN) and reconciled
+      against billed PHP, month-average / month-end FX, allocated invoice roaming lines and
+      booked ROAMING revenue; CDR roaming activity and reference wholesale cost alongside.
+      Ported from x_h07.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['usage_month', 'home_region', 'visited_country', 'partner_operator']}
+    columns:
+      - name: usage_month
+        data_tests: [not_null]
+      - name: recon_status
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['MISSING_RATE', 'FX_MISMATCH', 'STALE_RATE', 'INVOICE_GAP', 'OK']}
+
+  - name: adv_revenue_share_rank
+    description: >
+      SECURE VIEW. Top 10 plans per home region and month by earned revenue with share,
+      rank / dense rank / cume dist / decile, MoM growth, PIVOTed revenue by source,
+      collection rate, usage per user, churn exposure, features and partner mix.
+      Ported from x_h08.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['revenue_month', 'region_name', 'plan_id']}
+    columns:
+      - name: rank_in_region
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 10}}
+      - name: plan_role
+        data_tests:
+          - accepted_values: {arguments: {values: ['LEADER', 'CORE', 'GROWING', 'TAIL']}}
+
+  - name: adv_ftth_hierarchy_rollup
+    description: >
+      Daily snapshot of the FTTH tree (recursive CTE OLT -> CABINET -> SPLITTER -> PORT ->
+      LINE) with subtree services, ONT optical health, tickets, field work, outages,
+      month-to-date revenue, capacity utilisation, geo distances and a health score.
+      Ported from x_h09.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['snapshot_date', 'node_id']}
+    columns:
+      - name: node_id
+        data_tests: [not_null]
+      - name: node_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['EMPTY', 'CRITICAL', 'DEGRADED', 'NEAR_FULL', 'HEALTHY']}}
+      - name: health_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+
+  - name: adv_nearest_technician
+    description: >
+      Every work order in the window: assigned technician vs nearest (ST_DISTANCE) and
+      best-scored candidate (distance, skill, region, workload, contractor), H3 cells, top-3
+      nearest as JSON, 90-day track record, repeat visits, slot adherence and SLA.
+      Ported from x_h10 (originally a dynamic table).
+    columns:
+      - name: work_order_id
+        data_tests: [unique, not_null]
+      - name: assignment_quality
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['ASSIGNED_TECH_UNKNOWN', 'OPTIMAL', 'ACCEPTABLE', 'SKILL_CONSTRAINED', 'CONTINUITY_CHOICE', 'SUBOPTIMAL']}
+
+  - name: adv_outage_geo_impact
+    description: >
+      Outage incidents per month: subscribers inside the affected area (ST_INTERSECTS) vs
+      recorded impact (recall / precision), cells, elements and alarms in the area, tickets
+      during the outage, credits issued, revenue at risk, population inside, 12-month
+      recurrence and concurrent incidents. Ported from x_h11.
+    columns:
+      - name: incident_id
+        data_tests: [unique, not_null]
+      - name: outage_month
+        data_tests: [not_null]
+      - name: record_quality
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['NO_SUBSCRIBERS', 'UNDER_RECORDED', 'OVER_RECORDED', 'CONSISTENT']}
+
+  - name: adv_monthly_usage_snapshot
+    description: >
+      Monthly per-subscriber usage snapshot (weekday/weekend, peak day, streaks via
+      CONDITIONAL_CHANGE_EVENT, cap use, MoM, revenue, recharges, roaming, tickets, contract,
+      segments, churn, deciles) with 12-month retention post-hook. Replaces the dynamic
+      per-month tables of x_h12 / SP_X_H12.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['snapshot_month', 'subscription_id']}
+    columns:
+      - name: snapshot_month
+        data_tests: [not_null]
+      - name: usage_state
+        data_tests:
+          - accepted_values:
+              arguments: {values: ['DORMANT', 'LAPSING', 'CAP_BREAKER', 'DECLINING', 'GROWING', 'STEADY']}
