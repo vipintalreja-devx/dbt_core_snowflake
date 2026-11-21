@@ -6,6 +6,7 @@
     copy_grants=true,
     post_hook="alter table {{ this }} set comment = 'Gold dimension - dim_subscriber_history (rebuilt {{ run_started_at.strftime(\'%Y-%m-%d %H:%M\') }} UTC)'"
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- SCD Type 2 subscriber history from the daily snapshot (plan / status / home cell / device / brand).
 select
     {{ dbt_utils.generate_surrogate_key(['s.subscription_id', 's.dbt_valid_from']) }} as subscriber_version_key,

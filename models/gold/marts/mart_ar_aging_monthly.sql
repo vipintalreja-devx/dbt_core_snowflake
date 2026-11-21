@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='month_end',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -14,6 +17,8 @@ with month_ends as (
     from {{ ref('dim_date') }}
     where date_day between '{{ var("history_start_date") }}'::date
                        and (select max(issue_date) from {{ ref('slv_invoice') }})
+      -- incremental: restate the last two month ends (late payments / credits / reversals)
+      and month_end >= {{ f3_month_lower_bound('month_end') }}
 ),
 inv as (
     select invoice_id, account_id, issue_date, due_date, invoice_amount_php

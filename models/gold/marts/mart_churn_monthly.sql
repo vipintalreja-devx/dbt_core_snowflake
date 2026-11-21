@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='month_start',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -22,4 +25,5 @@ select
     sum(iff(is_churned, total_revenue_php, 0))              as churned_revenue_php
 from {{ ref('fct_subscriber_monthly') }}
 where is_reportable
+  and {{ f2_month_window('month_start', 'month_start') }}
 group by 1, 2, 3

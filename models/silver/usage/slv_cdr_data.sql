@@ -1,18 +1,21 @@
 {{ config(
-    tags=['silver', 'usage'],
+    tags=['silver', 'usage', 'cdc'],
     schema='silver',
     materialized='incremental',
     unique_key='session_id',
     incremental_strategy='merge',
     cluster_by=['event_date'],
-    on_schema_change='append_new_columns'
+    on_schema_change='append_new_columns',
+    full_refresh=false,
+    post_hook=["{{ cdc_log_changed_dates('event_date') }}",
+               "{{ cdc_log_deletes('session_id', 'event_date') }}",
+               "{{ cdc_purge_tombstones() }}"]
 ) }}
--- Data sessions. Bronze SESSION_START/END are TIMESTAMP_NTZ in UTC.
+-- Data sessions. Bronze SESSION_START/END are TIMESTAMP_NTZ in UTC. CDC from bronze (see cdc.sql).
 with src as (
     select *
-    from {{ source('usage', 'cdr_data') }}
-    where session_start >= {{ incremental_ts_lower_bound() }}
-    qualify row_number() over (partition by session_id order by ingested_at desc nulls last) = 1
+    from {{ cdc_source('usage', 'cdr_data', "session_start >= " ~ incremental_ts_lower_bound()) }}
+    qualify row_number() over (partition by session_id order by iff(_cdc_action = 'DELETE', 1, 0) desc, ingested_at desc nulls last) = 1
 ),
 shaped as (
     select
@@ -29,10 +32,11 @@ shaped as (
         nullif(upper(trim(apn)), '')                        as apn,
         upper(rat)                                          as rat,
         coalesce(is_roaming, false)                         as is_roaming,
-        {{ tz_to_utc('ingested_at') }}                      as ingested_at_utc
+        {{ tz_to_utc('ingested_at') }}                      as ingested_at_utc,
+        _cdc_action
     from src
     where subscription_id is not null
 )
-select *, session_start_local::date as event_date
+select * exclude (_cdc_action), session_start_local::date as event_date, _cdc_action, {{ dbt_loaded_at() }} as _dbt_loaded_at
 from shaped
-where {{ incremental_date_filter('session_start_local::date', 'event_date') }}
+where {{ full_refresh_floor('session_start_local::date') }}

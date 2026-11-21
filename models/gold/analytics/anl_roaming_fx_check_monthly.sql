@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='usage_month',
+    on_schema_change='append_new_columns',
     tags=['gold', 'analytics', 'roaming', 'revenue_assurance', 'm14']
 ) }}
 -- Roaming revenue-assurance check per month and visited country: USD charges re-rated at the FX
@@ -12,6 +15,7 @@ with tap as (
            charge_usd, charge_php, data_mb, voice_min, sms_count
     from {{ source('usage', 'roaming_usage') }}
     where usage_date >= '{{ var("history_start_date") }}'::date
+      and {{ f2_month_window("date_trunc('month', usage_date)::date", 'usage_month') }}
 ),
 fx as (
     select valid_from as rate_date, rate
@@ -49,6 +53,7 @@ by_country as (
 silver_check as (
     select date_trunc('month', event_date)::date as usage_month, visited_country, sum(fx_variance_php) as silver_variance_php
     from {{ ref('slv_roaming_usage') }}
+    where {{ f2_month_window("date_trunc('month', event_date)::date", 'usage_month') }}
     group by 1, 2
 )
 select

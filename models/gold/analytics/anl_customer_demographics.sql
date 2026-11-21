@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'customers', 'demographics', 'm37']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- Customer base demographics per age band, gender, language and island group: customers, active
 -- lines, lines per customer, spend, data usage, churn risk and digital adoption.
 -- Ported from x_m37_customer_demographics (PIPE_X.SP_X_M37_CUSTOMER_DEMOGRAPHICS).

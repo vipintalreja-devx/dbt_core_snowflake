@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='completed_date',
+    on_schema_change='append_new_columns',
     cluster_by=['completed_date'],
     tags=['gold', 'aggregates', 'care', 'field_service', 'e09']
 ) }}
@@ -22,7 +25,7 @@ with wo as (
     left join {{ ref('slv_field_technician') }} t on t.technician_id = w.technician_id
     left join {{ ref('dim_region') }} r          on r.region_id = t.region_id
     left join {{ ref('slv_ticket') }} tk         on tk.ticket_id = w.ticket_id
-    where w.completed_at_local >= '{{ var("history_start_date") }}'::timestamp_ntz
+    where w.completed_at_local::date >= {{ f1_lower_bound('completed_date') }}
 )
 select
     completed_date, work_type, outcome, region_name,

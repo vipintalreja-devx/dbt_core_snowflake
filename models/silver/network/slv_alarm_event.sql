@@ -1,10 +1,17 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
     schema='silver',
-    tags=['silver', 'network'],
+    tags=['silver', 'network', 'cdc'],
     transient=true,
-    cluster_by=['event_date']
+    unique_key='alarm_id',
+    incremental_strategy='merge',
+    cluster_by=['event_date'],
+    on_schema_change='append_new_columns',
+    post_hook=["{{ cdc_log_changed_dates('event_date') }}",
+               "{{ cdc_log_deletes('alarm_id', 'event_date') }}",
+               "{{ cdc_purge_tombstones() }}"]
 ) }}
+-- Network alarms. CDC: new alarms and clears (CLEARED_AT updated later by the NMS).
 select
     alarm_id,
     element_id,
@@ -17,6 +24,8 @@ select
     cleared_at is null                                      as is_active,
     datediff('minute', raised_at, cleared_at)               as duration_min,
     incident_id,
-    description
-from {{ source('network', 'alarm_event') }}
-where raised_at >= dateadd('day', -1, '{{ var("history_start_date") }}'::date)::timestamp_tz
+    description,
+    _cdc_action,
+    {{ dbt_loaded_at() }}                                   as _dbt_loaded_at
+from {{ cdc_source('network', 'alarm_event', "raised_at >= dateadd('day', -1, '" ~ var('history_start_date') ~ "'::date)::timestamp_tz") }}
+qualify row_number() over (partition by alarm_id order by iff(_cdc_action = 'DELETE', 1, 0) desc) = 1

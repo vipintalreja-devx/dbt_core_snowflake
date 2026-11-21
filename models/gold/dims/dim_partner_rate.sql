@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'partner', 'g4'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- In-force MVNO wholesale rate per brand / service / unit, with the previous rate, the USD
 -- equivalent at the latest FX rate, whether the rate is confirmed by the latest landing file,
 -- and the brand's last settlement.

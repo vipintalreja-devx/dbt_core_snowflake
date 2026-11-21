@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='billing_month',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -18,6 +21,7 @@ with inv as (
            sum(outstanding_php)                             as outstanding_php
     from {{ ref('fct_invoice') }}
     where billing_month >= date_trunc('month', '{{ var("history_start_date") }}'::date)
+      and {{ f2_month_window('billing_month', 'billing_month') }}
     group by 1, 2
 ),
 earned as (
@@ -26,6 +30,7 @@ earned as (
     select p.account_id, m.month_start as billing_month, sum(m.total_revenue_php) as earned_php
     from {{ ref('fct_subscriber_monthly') }} m
     join {{ ref('int_subscriber_profile') }} p on p.subscription_id = m.subscription_id
+    where {{ f2_month_window('m.month_start', 'billing_month') }}
     group by 1, 2
 )
 select

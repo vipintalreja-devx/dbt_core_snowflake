@@ -4,8 +4,7 @@
                    (late revenue / late CDRs / restated invoices). -#}
 {% macro f2_month_window(month_expr, target_col='month_start') -%}
     {%- if is_incremental() -%}
-        {{ month_expr }} >= (select coalesce(dateadd('month', -1, max({{ target_col }})),
-                                             date_trunc('month', '{{ var("history_start_date") }}'::date)) from {{ this }})
+        {{ month_expr }} >= {{ cdc_widen_month("(select coalesce(dateadd('month', -1, max(" ~ target_col ~ ")), date_trunc('month', '" ~ var('history_start_date') ~ "'::date)) from " ~ this ~ ")") }}
     {%- else -%}
         {{ month_expr }} >= date_trunc('month', '{{ var("history_start_date") }}'::date)
     {%- endif -%}

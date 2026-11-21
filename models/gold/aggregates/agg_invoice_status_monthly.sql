@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='billing_month',
+    on_schema_change='append_new_columns',
     cluster_by=['billing_month'],
     tags=['gold', 'aggregates', 'billing', 'e03']
 ) }}
@@ -26,6 +29,8 @@ inv as (
     left join {{ ref('dim_account') }} a on a.account_id = f.account_id
     left join acct_region ar            on ar.account_id = f.account_id
     left join {{ ref('dim_region') }} r on r.region_id = ar.region_id
+    -- one extra month of input so the month-over-month lag is right for the first output month
+    where f.billing_month >= dateadd('month', -1, {{ f3_month_lower_bound('billing_month') }})
 ),
 monthly as (
     select
@@ -57,3 +62,4 @@ select
                lag(m.billed_php) over (partition by m.invoice_status, m.region_name order by m.billing_month)) * 100, 2) as billed_mom_pct,
     current_timestamp()                                     as loaded_at
 from monthly m
+qualify {{ f2_month_window('m.billing_month', 'billing_month') }}

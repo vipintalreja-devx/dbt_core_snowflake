@@ -5,6 +5,7 @@
     transient=false,
     copy_grants=true
 ) }}
+-- Materialization: table (current-state/small reference): tiny reference (60 settlement rows).
 -- MVNO wholesale settlement check: expected revenue share (from earned revenue of the
 -- partner's lines x contractual share %) vs. the settlement actually booked.
 with earned as (

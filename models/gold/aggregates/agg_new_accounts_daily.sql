@@ -3,6 +3,7 @@
     cluster_by=['created_date'],
     tags=['gold', 'aggregates', 'core', 'acquisition', 'e11']
 ) }}
+-- Materialization: table (current-state/small reference): reads the account master (600k rows, not a CDC event feed).
 -- New billing accounts per creation day x payment method x paperless flag, with customer and line mix.
 -- Ported from x_e11_new_accounts_daily (PIPE_X.SP_X_E11_NEW_ACCOUNTS_DAILY). Account creation is
 -- sparse inside the dev window, so this aggregate covers full history (small table).

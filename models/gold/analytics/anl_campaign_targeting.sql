@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'marketing', 'campaigns', 'm25']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- Campaign targeting rules exploded per targeted region (LATERAL FLATTEN on the regions JSON array)
 -- and sized against the current base: how many reportable lines actually satisfy each rule.
 -- Ported from x_m25_campaign_targeting_flat (PIPE_X.SP_X_M25_CAMPAIGN_TARGETING_FLAT) - all campaigns

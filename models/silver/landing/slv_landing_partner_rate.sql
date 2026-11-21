@@ -8,7 +8,7 @@
 -- Ported from telco_v2_core p3_partner_rates. The file load itself stays outside dbt; this model
 -- validates each loaded row against the brand master and the in-force rate card.
 -- Grain: one row per loaded file row (deduplicated on brand/service/unit/effective_from/file).
--- Sources (3): landing.partner_rate_raw (bronze), slv_partner_brand, slv_partner_rate_card.
+-- Sources (4): landing.partner_rate_raw (bronze), s3_feeds.ext_partner_rate (S3 external table), slv_partner_brand, slv_partner_rate_card.
 with raw as (
     select
         r.partner_brand_id,
@@ -18,9 +18,18 @@ with raw as (
         r.effective_from,
         r.effective_to,
         r.file_name,
-        regexp_substr(r.file_name, '[0-9]{8}')                  as file_date_token,
+        coalesce(regexp_substr(r.file_name, '[0-9]{8}'),
+                 replace(regexp_substr(r.file_name, '[0-9]{4}-[0-9]{2}-[0-9]{2}'), '-', '')) as file_date_token,
         {{ tz_to_utc('r.loaded_at') }}                          as loaded_at_utc
-    from {{ source('landing', 'partner_rate_raw') }} r
+    from (
+        -- legacy COPY INTO landing table + daily partner files read in place through the S3 external table
+        select partner_brand_id, service_type, unit, rate_php, effective_from, effective_to, file_name, loaded_at
+          from {{ source('landing', 'partner_rate_raw') }}
+        union all
+        select partner_brand_id, service_type, unit, rate_php, effective_from, effective_to, file_name,
+               dateadd('hour', 1, feed_date::timestamp_ltz) as loaded_at
+          from {{ source('s3_feeds', 'ext_partner_rate') }}
+    ) r
     qualify row_number() over (partition by r.partner_brand_id, upper(trim(r.service_type)), trim(r.unit),
                                             r.effective_from, r.file_name
                                order by r.loaded_at desc) = 1

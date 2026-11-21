@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'aggregates', 'core', 'inventory', 'snapshot', 'e12']
 ) }}
+-- Materialization: table (current-state/small reference): current-state snapshot of a small reference/master table - rebuilt in seconds.
 -- Current SIM stock per type x status x region of the line using the SIM, with stock ageing.
 -- Ported from x_e12_sim_inventory_snapshot (PIPE_X.SP_X_E12_SIM_INVENTORY_SNAPSHOT).
 -- Grain   : sim_type x sim_status x region_name   (current state)

@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='change_date',
+    on_schema_change='append_new_columns',
     cluster_by=['change_date'],
     tags=['gold', 'aggregates', 'care', 'workflow', 'e28']
 ) }}
@@ -28,7 +31,9 @@ t as (
     from h
     left join {{ ref('slv_ticket') }} tk   on tk.ticket_id = h.ticket_id
     left join {{ ref('sla_policy') }} sla on sla.priority = tk.priority
-    where h.changed_at_local >= '{{ var("history_start_date") }}'::timestamp_ntz
+    -- lag()/conditional_change_event() above run over each ticket's FULL history; only the
+    -- output days are restricted to the incremental window
+    where h.changed_at_local::date >= {{ f1_lower_bound('change_date') }}
 )
 select
     change_date,

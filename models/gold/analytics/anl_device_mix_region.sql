@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'devices', 'm12']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- Device mix of the active base per home region and manufacturer: 5G readiness, device price tier,
 -- device age and the data appetite of each segment (last closed month).
 -- Ported from x_m12_device_mix_region (PIPE_X.SP_X_M12_DEVICE_MIX_REGION).

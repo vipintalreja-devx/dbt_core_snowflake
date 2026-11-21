@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='work_month',
+    on_schema_change='append_new_columns',
     cluster_by=['work_month'],
     tags=['gold', 'analytics', 'care', 'field_force', 'm07']
 ) }}
@@ -18,6 +21,8 @@ with wo as (
         t.category
     from {{ ref('slv_work_order') }} w
     left join {{ ref('fct_ticket') }} t on t.ticket_id = w.ticket_id
+    -- one extra month of input for the month-over-month lag
+    where date_trunc('month', w.created_date)::date >= dateadd('month', -1, {{ f3_month_lower_bound('work_month') }})
 ),
 agg as (
     select
@@ -70,3 +75,4 @@ select
 from agg a
 join {{ ref('slv_field_technician') }} t on t.technician_id = a.technician_id
 left join {{ ref('slv_region') }} r      on r.region_id = t.region_id
+qualify {{ f2_month_window('a.work_month', 'work_month') }}

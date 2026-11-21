@@ -79,6 +79,8 @@ daily AS (
     FROM {{ ref('fct_subscriber_usage_daily') }} u
     WHERE u.EVENT_DATE >= (SELECT DATEADD('month', -1, MIN(RUN_MONTH)) FROM months)
       AND u.EVENT_DATE <  (SELECT MAX(NEXT_MONTH) FROM months)
+      -- literal copy of the window start so Snowflake prunes fct_subscriber_usage_daily partitions
+      AND u.EVENT_DATE >= DATEADD('month', -1, {{ f3_month_lower_bound('snapshot_month') }})
 ),
 
 usage_cur AS (

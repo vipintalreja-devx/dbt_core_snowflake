@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='action_date',
+    on_schema_change='append_new_columns',
     cluster_by=['action_date'],
     tags=['gold', 'aggregates', 'billing', 'collections', 'e05']
 ) }}
@@ -26,7 +29,7 @@ ev as (
     left join {{ ref('fct_invoice') }} f on f.invoice_id = d.invoice_id
     left join acct_region ar            on ar.account_id = d.account_id
     left join {{ ref('dim_region') }} r on r.region_id = ar.region_id
-    where d.action_date >= dateadd('day', -7, '{{ var("history_start_date") }}'::date)
+    where d.action_date >= {{ f1_lower_bound('action_date', 7) }}
 ),
 daily as (
     select
@@ -50,4 +53,4 @@ select
                         rows between 6 preceding and current row) as events_7d,
     current_timestamp()                                     as loaded_at
 from daily d
-qualify d.action_date >= '{{ var("history_start_date") }}'::date
+qualify d.action_date >= {{ f1_lower_bound('action_date') }}

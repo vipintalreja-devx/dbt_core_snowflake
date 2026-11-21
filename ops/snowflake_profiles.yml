@@ -1,0 +1,16 @@
+# profiles.yml used INSIDE Snowflake (dbt Projects on Snowflake). Copied into the deploy
+# bundle by ops/deploy_dbt_project.py -- not placed in the repo root, because dbt would
+# then prefer it over ~/.dbt/profiles.yml for local runs. Authentication is the session
+# of whoever executes the project (the OPS task owner, DBT_ROLE), so no secrets here.
+my_project:
+  target: prod
+  outputs:
+    prod:
+      type: snowflake
+      account: ''
+      user: ''
+      role: DBT_ROLE
+      warehouse: ETL_WH
+      database: TELCO_PROD_XL_V2
+      schema: DBT_TELCO
+      threads: 8

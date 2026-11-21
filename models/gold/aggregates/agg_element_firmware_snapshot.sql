@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'aggregates', 'network', 'inventory', 'snapshot', 'e22']
 ) }}
+-- Materialization: table (current-state/small reference): current-state snapshot of a small reference/master table - rebuilt in seconds.
 -- Network elements per type x vendor x firmware version (current state): footprint, fault rate in
 -- the window and whether the version is the vendor's latest - the firmware-upgrade backlog.
 -- Ported from x_e22_element_firmware_snapshot (PIPE_X.SP_X_E22_ELEMENT_FIRMWARE_SNAPSHOT).

@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='adjustment_month',
+    on_schema_change='append_new_columns',
     cluster_by=['adjustment_month'],
     tags=['gold', 'aggregates', 'billing', 'revenue_assurance', 'e04']
 ) }}
@@ -26,11 +29,14 @@ adj as (
     left join {{ ref('slv_invoice') }} i on i.invoice_id = a.invoice_id
     left join acct_region ar            on ar.account_id = a.account_id
     left join {{ ref('dim_region') }} r on r.region_id = ar.region_id
+    -- one extra month of input so the month-over-month lag is right for the first output month
+    where date_trunc('month', a.adjustment_date)::date >= dateadd('month', -1, {{ f3_month_lower_bound('adjustment_month') }})
 ),
 outage_ctx as (
     select date_trunc('month', event_date)::date as adjustment_month, region_id,
            sum(outage_minutes) as outage_minutes, sum(credit_eligible_lines) as credit_eligible_lines
     from {{ ref('fct_outage') }}
+    where date_trunc('month', event_date)::date >= dateadd('month', -1, {{ f3_month_lower_bound('adjustment_month') }})
     group by 1, 2
 ),
 monthly as (
@@ -62,3 +68,4 @@ select
     current_timestamp()                                     as loaded_at
 from monthly m
 left join outage_ctx o on o.adjustment_month = m.adjustment_month and o.region_id = m.region_id
+qualify {{ f2_month_window('m.adjustment_month', 'adjustment_month') }}

@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'scd2', 'h04'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- SCD Type 2 account profile dimension over snapshot snap_account_profile.
 -- Ported from telco_v2_core x_h04_dim_account_profile_scd2. Grain: account x version.
 -- Sources: snap_account_profile, dim_account (current line counts), dim_customer (age band).

@@ -3,6 +3,7 @@
     cluster_by=['assessment_date'],
     tags=['gold', 'analytics', 'billing', 'revenue_assurance', 'm20']
 ) }}
+-- Materialization: table (current-state/small reference): small (one month-end assessment set per month) and compares against current invoice state.
 -- Late-fee revenue assurance: every assessed fee recomputed from the rule table (rate x invoice,
 -- floored at the minimum fee, rule band by days overdue) and compared with what was charged.
 -- Ported from x_m20_late_fee_recalc_daily (PIPE_X.SP_X_M20_LATE_FEE_RECALC_DAILY) - all assessment

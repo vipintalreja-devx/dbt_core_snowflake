@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'churn', 'm10']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- Churn-risk exposure per home region and risk band from the latest model score: lines, probability
 -- distribution, revenue at risk (last closed month revenue x probability) and open-ticket overlap.
 -- Ported from x_m10_churn_band_region (PIPE_X.SP_X_M10_CHURN_BAND_REGION).

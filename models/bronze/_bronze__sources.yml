@@ -65,8 +65,10 @@ sources:
     schema: USAGE
     config:
       loaded_at_field: "ingested_at"
+      # warn after a missed day; ERROR (stops OPS.T_DBT_BUILD) after two days without a load
       freshness:
         warn_after: {count: 1, period: day}
+        error_after: {count: 2, period: day}
     tables:
       - name: cdr_voice
         columns:
@@ -182,6 +184,21 @@ sources:
     tables:
       - name: device_feed_raw
       - name: partner_rate_raw
+
+  - name: s3_feeds
+    description: "External tables over s3://devx-telco-native-landing/ingest/ (storage integration S3_TELCO_NATIVE): daily vendor and partner files, refreshed by S3 event notifications and by INGEST.SP_LOAD_FILES."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: INGEST
+    config:
+      loaded_at_field: "feed_date::timestamp_ltz"
+      freshness:
+        warn_after: {count: 2, period: day}
+        error_after: {count: 4, period: day}
+    tables:
+      - name: ext_device_feed
+        description: "Vendor device catalogue / price updates, one JSON file per day (partition FEED_DATE from dt=YYYY-MM-DD)."
+      - name: ext_partner_rate
+        description: "MVNO partner wholesale rate files, one CSV per day (partition FEED_DATE)."
 
   - name: ext
     description: "Reference/network tables that exist only in the DBT_V2_RAW extract (IP pools, unit conversions)."

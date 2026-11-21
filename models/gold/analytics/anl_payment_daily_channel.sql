@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='payment_date',
+    on_schema_change='append_new_columns',
     cluster_by=['payment_date'],
     tags=['gold', 'analytics', 'billing', 'payments', 'm29']
 ) }}
@@ -27,7 +30,7 @@ daily as (
     from {{ ref('fct_payment') }} p
     left join {{ ref('dim_account') }} a on a.account_id = p.account_id
     left join acct_region ar             on ar.account_id = p.account_id
-    where p.payment_date >= '{{ var("history_start_date") }}'::date
+    where p.payment_date >= {{ f1_lower_bound('payment_date', 7) }}
     group by 1, 2, 3
 )
 select
@@ -38,3 +41,4 @@ select
                                   order by d.payment_date rows between 6 preceding and current row), 2) as amount_php_ma7,
     current_timestamp()                                     as loaded_at
 from daily d
+qualify d.payment_date >= {{ f1_lower_bound('payment_date') }}

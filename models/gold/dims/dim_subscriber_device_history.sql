@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'scd2', 'h02'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- SCD Type 2 subscriber device / SIM dimension over snapshot snap_subscriber_device.
 -- Ported from telco_v2_core x_h02_dim_subscriber_device_scd2. Grain: line x version.
 -- Classifies each version change (device swap, SIM swap, eSIM migration, 5G upgrade, brand move).

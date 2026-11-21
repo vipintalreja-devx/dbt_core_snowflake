@@ -3,6 +3,7 @@
     cluster_by=['settlement_month'],
     tags=['gold', 'aggregates', 'partner', 'finance', 'e27']
 ) }}
+-- Materialization: table (current-state/small reference): tiny reference (60 settlement rows).
 -- MVNO partner settlements per month x brand x status: effective vs contractual revenue share,
 -- USD value at the month-end rate and settlement lead time. Full history.
 -- Ported from x_e27_partner_settlement_monthly (PIPE_X.SP_X_E27_PARTNER_SETTLEMENT_MONTHLY).

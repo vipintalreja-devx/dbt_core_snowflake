@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='payment_date',
+    on_schema_change='append_new_columns',
     cluster_by=['payment_date'],
     tags=['gold', 'aggregates', 'billing', 'collections', 'e02']
 ) }}
@@ -25,7 +28,7 @@ pay as (
     from {{ ref('slv_payment') }} p
     left join {{ ref('slv_invoice') }} i on i.invoice_id = p.invoice_id
     left join acct_region a             on a.account_id = p.account_id
-    where p.payment_date >= dateadd('day', -7, '{{ var("history_start_date") }}'::date)
+    where p.payment_date >= {{ f1_lower_bound('payment_date', 7) }}
 ),
 island as (
     select payment_date, payment_channel, payment_method, island_group, sum(payment_amount_php) as amount_php
@@ -68,4 +71,4 @@ from daily d
 left join island_obj o
        on o.payment_date = d.payment_date and o.payment_channel = d.payment_channel and o.payment_method = d.payment_method
 left join {{ ref('dim_date') }} dd on dd.date_day = d.payment_date
-qualify d.payment_date >= '{{ var("history_start_date") }}'::date
+qualify d.payment_date >= {{ f1_lower_bound('payment_date') }}

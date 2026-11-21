@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'devices', 'm23']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- Device specification catalogue parsed from the SPECS JSON (chipset, memory, bands, eSIM, VoLTE,
 -- type approval) with the size of the active base on each model and a capability score.
 -- Ported from x_m23_device_specs_flat (PIPE_X.SP_X_M23_DEVICE_SPECS_FLAT).

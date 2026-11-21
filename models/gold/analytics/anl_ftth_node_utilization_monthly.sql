@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='month_end',
+    on_schema_change='append_new_columns',
     cluster_by=['month_end'],
     tags=['gold', 'analytics', 'network', 'ftth', 'capacity', 'm19']
 ) }}
@@ -32,6 +35,8 @@ month_ends as (
     from {{ ref('dim_date') }}
     where date_day between '{{ var("history_start_date") }}'::date
                        and (select max(provisioned_at_utc)::date from {{ ref('slv_service_instance') }})
+      -- one extra month end of input for the month-over-month net adds
+      and month_end >= dateadd('month', -1, {{ f3_month_lower_bound('month_end') }})
 ),
 active as (
     select me.month_end, si.ftth_node_id as line_node_id
@@ -73,3 +78,4 @@ from used u
 join {{ source('network', 'ftth_topology') }} n on n.node_id = u.node_id
 left join {{ ref('slv_region') }} r on r.region_id = n.region_id
 left join passed pa on pa.node_id = u.node_id
+qualify {{ f2_month_window('u.month_end', 'month_end') }}

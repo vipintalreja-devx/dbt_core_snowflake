@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'aggregates', 'core', 'privacy', 'snapshot', 'e14']
 ) }}
+-- Materialization: table (current-state/small reference): current-state snapshot of a small reference/master table - rebuilt in seconds.
 -- Current customer consent coverage per consent type x channel x age band (Data Privacy Act reporting).
 -- CHANNEL_LIST is exploded with LATERAL FLATTEN so each permitted channel is counted.
 -- Ported from x_e14_consent_snapshot (PIPE_X.SP_X_E14_CONSENT_SNAPSHOT).

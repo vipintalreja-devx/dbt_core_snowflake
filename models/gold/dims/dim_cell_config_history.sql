@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'scd2', 'network', 'h03'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- SCD Type 2 cell configuration dimension over snapshot snap_cell_config (timestamp strategy).
 -- Ported from telco_v2_core x_h03_dim_cell_config_scd2. Grain: cell x configuration version.
 -- Joined with the latest quality day from fct_cell_kpi_daily so config drift can be related to KPIs.

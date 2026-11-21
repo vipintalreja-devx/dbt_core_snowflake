@@ -5,6 +5,7 @@
     transient=false,
     copy_grants=true
 ) }}
+-- Materialization: table (current-state/small reference): defined as the current state of each subscriber.
 -- One row per line: everything Care, Marketing and Retention need on one screen.
 with last_month as (select max(month_start) as m from {{ ref('fct_subscriber_monthly') }}),
 rev as (

@@ -7,7 +7,8 @@
     query_tag = 'dbt_telco_h15'
   )
 }}
-{#-
+-- Materialization: table (current-state/small reference): billing-close step table, restated with the close DAG (adv_billing_close is the incremental output).
+{#
   adv_billing_close_invoice_totals  -  Billing close, step 1 of 3: invoice totals
   ------------------------------------------------------------------------------------------
   Ported from x_h15_invoice_totals (root task of the PIPE_X H15 task graph ->

@@ -7,7 +7,8 @@
     query_tag = 'dbt_telco_adv_h10'
   )
 }}
-{#-
+-- Materialization: table (current-state/small reference): current dispatch view (open work x technician geography).
+{#
   adv_nearest_technician  -  Assigned vs nearest technician
   ------------------------------------------------------------------------------------------
   Ported from x_h10_nearest_technician (PIPE_X.SP_X_H10_NEAREST_TECHNICIAN).

@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='event_date',
+    on_schema_change='append_new_columns',
     cluster_by=['event_date'],
     tags=['gold', 'aggregates', 'network', 'fault_management', 'e20']
 ) }}
@@ -19,6 +22,7 @@ with a as (
     left join {{ ref('slv_network_element') }} ne on ne.element_id = al.element_id
     left join {{ ref('dim_cell') }} c             on c.cell_id = al.cell_id
     left join {{ ref('slv_outage_incident') }} oi on oi.incident_id = al.incident_id
+    where al.event_date >= {{ f1_lower_bound('event_date') }}
 ),
 region_counts as (
     select event_date, severity, alarm_code, vendor, region_name, count(*) as region_alarms

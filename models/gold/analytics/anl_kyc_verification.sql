@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'analytics', 'compliance', 'kyc', 'm24']
 ) }}
+-- Materialization: table (current-state/small reference): current-state profile of the subscriber/device base.
 -- SIM-registration / KYC quality (Philippine SIM Registration Act): verification channel, document
 -- type, liveness band, address proof and consent coverage - no personal fields kept.
 -- Ported from x_m24_kyc_verification_snapshot (PIPE_X.SP_X_M24_KYC_VERIFICATION_SNAPSHOT).

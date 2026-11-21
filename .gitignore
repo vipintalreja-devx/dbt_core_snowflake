@@ -3,3 +3,11 @@ target/
 dbt_packages/
 logs/
 .env
+
+# local Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.user.yml

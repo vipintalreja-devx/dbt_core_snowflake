@@ -9,7 +9,7 @@
     previous month is restated together with the current one. -#}
 {% macro f3_month_lower_bound(month_col) -%}
     {%- if is_incremental() -%}
-        (select coalesce(dateadd('month', -1, max({{ month_col }})), date_trunc('month', '{{ var("history_start_date") }}'::date)) from {{ this }})
+        {{ cdc_widen_month("(select coalesce(dateadd('month', -1, max(" ~ month_col ~ ")), date_trunc('month', '" ~ var('history_start_date') ~ "'::date)) from " ~ this ~ ")") }}
     {%- else -%}
         date_trunc('month', '{{ var("history_start_date") }}'::date)
     {%- endif -%}
@@ -21,7 +21,7 @@
     X-Small warehouse). Incremental: last loaded day minus var('lookback_days'). -#}
 {% macro f3_day_lower_bound(day_col, silver_rel, silver_day_col) -%}
     {%- if is_incremental() -%}
-        (select coalesce(dateadd('day', -{{ var('lookback_days') }}, max({{ day_col }})), '{{ var("history_start_date") }}'::date) from {{ this }})
+        {{ cdc_widen("(select coalesce(dateadd('day', -" ~ var('lookback_days') ~ ", max(" ~ day_col ~ ")), '" ~ var('history_start_date') ~ "'::date) from " ~ this ~ ")") }}
     {%- else -%}
         (select dateadd('day', -{{ var('adv_daily_days', 7) - 1 }}, max({{ silver_day_col }})) from {{ silver_rel }})
     {%- endif -%}

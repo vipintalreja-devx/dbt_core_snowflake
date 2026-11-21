@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='invoice_id',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'facts', 'fact'],
     transient=false,
@@ -7,7 +10,21 @@
     copy_grants=true
 ) }}
 -- Grain: invoice. Billed vs. line items vs. payments vs. credits, with collection metrics.
-with lines as (
+-- Incremental: invoices whose header, lines, payments, credits or late fees changed since the
+-- last run are recomputed over all their child rows (merge on invoice_id).
+with changed as (
+    select invoice_id from {{ cdc_changed_keys(ref('slv_invoice'), 'invoice_id') }}
+    union select invoice_id from {{ cdc_changed_keys(ref('slv_invoice_line'), 'invoice_id') }}
+    union select invoice_id from {{ cdc_changed_keys(ref('slv_payment'), 'invoice_id') }}
+    union select invoice_id from {{ cdc_changed_keys(ref('slv_adjustment'), 'invoice_id') }}
+    union select invoice_id from {{ cdc_changed_keys(ref('slv_late_fee_assessment'), 'invoice_id') }}
+    {%- if is_incremental() %}
+    -- payment reversals are hard deletes (row gone from silver): re-check every invoice
+    -- that had a payment in the last 45 days
+    union select invoice_id from {{ this }} where last_payment_date >= dateadd('day', -45, current_date())
+    {%- endif %}
+),
+lines as (
     select invoice_id,
            sum(line_amount_php)                                     as lines_php,
            sum(iff(line_type = 'PLAN_FEE', line_amount_php, 0))     as plan_fee_php,
@@ -18,6 +35,7 @@ with lines as (
            sum(iff(line_type = 'DISCOUNT', line_amount_php, 0))     as discount_php,
            count(*)                                                 as line_count
     from {{ ref('slv_invoice_line') }}
+    where invoice_id in (select invoice_id from changed)
     group by 1
 ),
 pay as (
@@ -28,16 +46,19 @@ pay as (
            max(payment_date)                                        as last_payment_date
     from {{ ref('slv_payment') }}
     where invoice_id is not null
+      and invoice_id in (select invoice_id from changed)
     group by 1
 ),
 adj as (
     select invoice_id, sum(credit_amount_php) as credits_php, count(*) as adjustments
     from {{ ref('slv_adjustment') }}
+    where invoice_id in (select invoice_id from changed)
     group by 1
 ),
 fees as (
     select invoice_id, max(fee_php) as late_fee_php, max(days_overdue) as max_days_overdue
     from {{ ref('slv_late_fee_assessment') }}
+    where invoice_id in (select invoice_id from changed)
     group by 1
 )
 select
@@ -73,3 +94,4 @@ left join lines l on l.invoice_id = i.invoice_id
 left join pay   p on p.invoice_id = i.invoice_id
 left join adj   a on a.invoice_id = i.invoice_id
 left join fees  f on f.invoice_id = i.invoice_id
+where i.invoice_id in (select invoice_id from changed)

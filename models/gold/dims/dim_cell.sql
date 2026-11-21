@@ -6,6 +6,7 @@
     copy_grants=true,
     post_hook="alter table {{ this }} set comment = 'Gold dimension - dim_cell (rebuilt {{ run_started_at.strftime(\'%Y-%m-%d %H:%M\') }} UTC)'"
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 with ne as (
     select cell_id, count(*) as network_elements, listagg(distinct vendor, ',') as vendors
     from {{ ref('slv_network_element') }}

@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'scd2', 'h01'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- SCD Type 2 contract dimension over snapshot snap_contract_profile.
 -- Ported from telco_v2_core x_h01_dim_contract_scd2. Grain: contract x version.
 -- Adds version sequencing, version duration and what changed vs. the previous version.

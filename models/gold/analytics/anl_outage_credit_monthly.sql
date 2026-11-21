@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='outage_month',
+    on_schema_change='append_new_columns',
     cluster_by=['outage_month'],
     tags=['gold', 'analytics', 'network', 'billing', 'sla_credit', 'm17']
 ) }}
@@ -24,6 +27,7 @@ with impact as (
     join {{ ref('slv_outage_impact') }} im on im.incident_id = i.incident_id and im.is_credit_eligible
     join {{ ref('slv_subscription') }} s   on s.subscription_id = im.subscription_id and s.is_reportable
     left join {{ ref('slv_region') }} r    on r.region_id = i.region_id
+    where {{ f2_month_window("date_trunc('month', i.event_date)::date", 'outage_month') }}
 ),
 granted as (
     select account_id, date_trunc('month', adjustment_date)::date as credit_month,

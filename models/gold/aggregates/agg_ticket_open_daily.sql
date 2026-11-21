@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='opened_date',
+    on_schema_change='append_new_columns',
     cluster_by=['opened_date'],
     tags=['gold', 'aggregates', 'care', 'e07']
 ) }}
@@ -19,7 +22,7 @@ with t as (
     from {{ ref('slv_ticket') }} tk
     left join {{ ref('sla_policy') }} sla            on sla.priority = tk.priority
     left join {{ ref('int_subscriber_profile') }} p   on p.subscription_id = tk.subscription_id
-    where tk.opened_date >= dateadd('day', -7, '{{ var("history_start_date") }}'::date)
+    where tk.opened_date >= {{ f1_lower_bound('opened_date', 7) }}
 ),
 daily as (
     select
@@ -48,4 +51,4 @@ select
     current_timestamp()                                     as loaded_at
 from daily d
 left join {{ ref('dim_date') }} dd on dd.date_day = d.opened_date
-qualify d.opened_date >= '{{ var("history_start_date") }}'::date
+qualify d.opened_date >= {{ f1_lower_bound('opened_date') }}

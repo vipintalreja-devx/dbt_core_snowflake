@@ -3,6 +3,7 @@
     cluster_by=['end_month'],
     tags=['gold', 'aggregates', 'core', 'retention', 'e13']
 ) }}
+-- Materialization: table (current-state/small reference): contract end months are forward-looking from the current contract master (600k rows).
 -- Contracts reaching their end date per month x contract type x auto-renew x churn band:
 -- the renewal pipeline and revenue at risk.
 -- Ported from x_e13_contract_expiry_monthly (PIPE_X.SP_X_E13_CONTRACT_EXPIRY_MONTHLY).

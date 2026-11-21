@@ -2,14 +2,16 @@
   Incremental window on a DATE column (business day).
   * full refresh / first run : load from var('history_start_date')
   * incremental              : re-load the last var('lookback_days') days that
-                               already exist in the target (late-arriving data)
+                               already exist in the target, widened back to the
+                               earliest date changed upstream since this model's
+                               last successful run (late rows / deletes, see cdc.sql)
   Used together with incremental_strategy='delete+insert' and
   unique_key=<date col> (aggregates) or the natural event key (events).
 =========================================================================== -#}
 {% macro incremental_date_filter(date_col, target_date_col=none) -%}
     {%- set tcol = target_date_col or date_col -%}
     {%- if is_incremental() -%}
-        {{ date_col }} >= (select coalesce(dateadd('day', -{{ var('lookback_days') }}, max({{ tcol }})), '{{ var("history_start_date") }}'::date) from {{ this }})
+        {{ date_col }} >= {{ cdc_widen("(select coalesce(dateadd('day', -" ~ var('lookback_days') ~ ", max(" ~ tcol ~ ")), '" ~ var('history_start_date') ~ "'::date) from " ~ this ~ ")") }}
     {%- else -%}
         {{ date_col }} >= '{{ var("history_start_date") }}'::date
     {%- endif -%}

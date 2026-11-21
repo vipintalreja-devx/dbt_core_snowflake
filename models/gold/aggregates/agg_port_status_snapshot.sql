@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'aggregates', 'network', 'inventory', 'snapshot', 'e23']
 ) }}
+-- Materialization: table (current-state/small reference): current-state snapshot of a small reference/master table - rebuilt in seconds.
 -- Network element ports per port type x admin status x oper status x vendor (current state):
 -- capacity, optical health and admin-up/oper-down faults.
 -- Ported from x_e23_port_status_snapshot (PIPE_X.SP_X_E23_PORT_STATUS_SNAPSHOT).

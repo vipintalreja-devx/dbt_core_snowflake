@@ -1,17 +1,26 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='incident_id',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'facts', 'fact'],
     transient=false,
     copy_grants=true
 ) }}
 -- Grain: outage incident, with customer impact and SLA-credit exposure.
-with impact as (
+-- Incremental: incidents whose header (e.g. restoration) or impact rows changed are recomputed.
+with changed as (
+    select incident_id from {{ cdc_changed_keys(ref('slv_outage_incident'), 'incident_id') }}
+    union select incident_id from {{ cdc_changed_keys(ref('slv_outage_impact'), 'incident_id') }}
+),
+impact as (
     select incident_id,
            count(*)                                         as impacted_lines,
            sum(impact_minutes)                              as impacted_line_minutes,
            count_if(is_credit_eligible)                     as credit_eligible_lines
     from {{ ref('slv_outage_impact') }}
+    where incident_id in (select incident_id from changed)
     group by 1
 )
 select
@@ -23,3 +32,4 @@ select
 from {{ ref('slv_outage_incident') }} o
 left join {{ ref('slv_region') }} r on r.region_id = o.region_id
 left join impact i on i.incident_id = o.incident_id
+where o.incident_id in (select incident_id from changed)

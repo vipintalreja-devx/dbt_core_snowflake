@@ -1,20 +1,24 @@
 {{ config(
-    tags=['silver', 'usage'],
+    tags=['silver', 'usage', 'cdc'],
     schema='silver',
     materialized='incremental',
     unique_key='record_id',
     incremental_strategy='merge',
     cluster_by=['event_date'],
-    on_schema_change='append_new_columns'
+    on_schema_change='append_new_columns',
+    post_hook=["{{ cdc_log_changed_dates('event_date') }}",
+               "{{ cdc_log_deletes('record_id', 'event_date') }}",
+               "{{ cdc_purge_tombstones() }}"]
 ) }}
 -- Parsed mediation xDRs (multi-vendor JSON). FAILED records are excluded here and
 -- counted in gold data-quality monitoring; PARTIAL records are kept and flagged.
+-- Bronze XDR_MEDIATION_RAW is TRANSIENT (1-day retention): CDC is used while the
+-- watermark is < 20h old, otherwise the received_at lookback window applies.
 with src as (
     select *
-    from {{ source('usage', 'xdr_mediation_raw') }}
-    where received_at >= {{ incremental_ts_lower_bound() }}::timestamp_ltz
-      and parse_status in ('OK', 'PARTIAL')
-    qualify row_number() over (partition by record_id order by received_at desc) = 1
+    from {{ cdc_source('usage', 'xdr_mediation_raw', "received_at >= " ~ incremental_ts_lower_bound() ~ "::timestamp_ltz", retention_hours=20) }}
+    where parse_status in ('OK', 'PARTIAL')
+    qualify row_number() over (partition by record_id order by iff(_cdc_action = 'DELETE', 1, 0) desc, received_at desc) = 1
 ),
 parsed as (
     select
@@ -41,13 +45,16 @@ parsed as (
         payload:qos.arp::number                             as arp,
         coalesce(array_size(payload:events), 0)             as event_count,
         payload:events                                      as events,
-        {{ tz_to_utc('received_at') }}                      as received_at_utc
+        {{ tz_to_utc('received_at') }}                      as received_at_utc,
+        _cdc_action
     from src
 )
 select
-    p.*,
+    p.* exclude (_cdc_action),
     {{ utc_to_local('p.session_start_utc') }}               as session_start_local,
-    {{ utc_to_local('p.session_start_utc') }}::date         as event_date
+    {{ utc_to_local('p.session_start_utc') }}::date         as event_date,
+    p._cdc_action,
+    {{ dbt_loaded_at() }}                                   as _dbt_loaded_at
 from parsed p
 where p.session_start_utc is not null
-  and {{ incremental_date_filter(utc_to_local('p.session_start_utc') ~ '::date', 'event_date') }}
+  and {{ full_refresh_floor(utc_to_local('p.session_start_utc') ~ '::date') }}

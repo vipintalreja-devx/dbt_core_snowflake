@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='slot_month',
+    on_schema_change='append_new_columns',
     tags=['gold', 'analytics', 'care', 'field_force', 'm08']
 ) }}
 -- Appointment adherence per month, region and booked half-hour slot: confirmed share, on-time
@@ -30,6 +33,7 @@ with appt as (
     left join {{ ref('slv_field_technician') }} t    on t.technician_id = w.technician_id
     left join {{ ref('slv_region') }} r              on r.region_id = t.region_id
     where w.slot_date is not null
+      and {{ f2_month_window("date_trunc('month', w.slot_date)::date", 'slot_month') }}
 )
 select
     slot_month,

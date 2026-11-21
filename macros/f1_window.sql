@@ -6,9 +6,7 @@
 =========================================================================== -#}
 {% macro f1_lower_bound(target_date_col, extra_days=0) -%}
     {%- if is_incremental() -%}
-        (select dateadd('day', -{{ var('lookback_days') + extra_days }},
-                        coalesce(max({{ target_date_col }}), '{{ var("history_start_date") }}'::date))
-           from {{ this }})
+        dateadd('day', -{{ extra_days }}, {{ cdc_widen("(select dateadd('day', -" ~ var('lookback_days') ~ ", coalesce(max(" ~ target_date_col ~ "), '" ~ var('history_start_date') ~ "'::date)) from " ~ this ~ ")") }})
     {%- else -%}
         dateadd('day', -{{ extra_days }}, '{{ var("history_start_date") }}'::date)
     {%- endif -%}

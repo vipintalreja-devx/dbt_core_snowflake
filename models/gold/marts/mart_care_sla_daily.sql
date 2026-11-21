@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='opened_date',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -21,5 +24,5 @@ select
     sum(work_orders)                                        as work_orders,
     round(avg(nps_score), 2)                                as avg_nps_score
 from {{ ref('fct_ticket') }}
-where opened_date >= '{{ var("history_start_date") }}'::date
+where opened_date >= {{ f1_lower_bound('opened_date') }}
 group by 1, 2, 3, 4

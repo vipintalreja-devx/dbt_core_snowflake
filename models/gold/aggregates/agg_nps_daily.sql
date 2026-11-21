@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='response_date',
+    on_schema_change='append_new_columns',
     cluster_by=['response_date'],
     tags=['gold', 'aggregates', 'care', 'customer_experience', 'e08']
 ) }}
@@ -18,7 +21,7 @@ with s as (
     from {{ ref('slv_nps_survey') }} n
     left join {{ ref('int_subscriber_profile') }} p on p.subscription_id = n.subscription_id
     left join {{ ref('slv_ticket') }} tk             on tk.ticket_id = n.ticket_id
-    where n.response_date >= dateadd('day', -7, '{{ var("history_start_date") }}'::date)
+    where n.response_date >= {{ f1_lower_bound('response_date', 7) }}
 ),
 daily as (
     select
@@ -55,4 +58,4 @@ select
                        array_construct(r.avg_q_price, r.avg_q_speed, r.avg_q_support, r.avg_q_coverage))]::string as weakest_driver,
     current_timestamp()                                     as loaded_at
 from rolled r
-where r.response_date >= '{{ var("history_start_date") }}'::date
+where r.response_date >= {{ f1_lower_bound('response_date') }}

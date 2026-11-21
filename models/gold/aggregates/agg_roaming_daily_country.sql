@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='event_date',
+    on_schema_change='append_new_columns',
     cluster_by=['event_date'],
     tags=['gold', 'aggregates', 'usage', 'roaming', 'e15']
 ) }}
@@ -16,6 +19,7 @@ with ru as (
         coalesce(p.home_region_name, 'UNKNOWN')             as home_region_name
     from {{ ref('slv_roaming_usage') }} r
     left join {{ ref('int_subscriber_profile') }} p on p.subscription_id = r.subscription_id
+    where r.event_date >= {{ f1_lower_bound('event_date', 7) }}
 ),
 daily as (
     select
@@ -48,3 +52,4 @@ select
     current_timestamp()                                     as loaded_at
 from daily d
 left join {{ ref('dim_date') }} dd on dd.date_day = d.event_date
+qualify d.event_date >= {{ f1_lower_bound('event_date') }}

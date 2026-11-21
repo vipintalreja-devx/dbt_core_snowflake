@@ -1,10 +1,16 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
     schema='silver',
-    tags=['silver', 'care'],
-    transient=true
+    tags=['silver', 'care', 'cdc'],
+    transient=true,
+    unique_key='work_order_id',
+    incremental_strategy='merge',
+    on_schema_change='append_new_columns',
+    post_hook=["{{ cdc_log_changed_dates('created_date') }}",
+               "{{ cdc_log_deletes('work_order_id', 'created_date') }}",
+               "{{ cdc_purge_tombstones() }}"]
 ) }}
--- Field work orders with their booked appointment slot (bronze times are Manila local NTZ).
+-- Field work orders with their booked appointment slot (bronze times are Manila local NTZ). CDC from bronze.
 select
     wo.work_order_id,
     wo.ticket_id,
@@ -28,7 +34,10 @@ select
         when wo.arrived_at <= timestamp_ntz_from_parts(ap.slot_date, ap.slot_end) then true
         else false
     end                                                     as is_arrived_in_slot,
-    upper(wo.outcome) in ('FIXED', 'REPLACED_CPE')          as is_first_time_fix
-from {{ source('care', 'work_order') }} wo
+    upper(wo.outcome) in ('FIXED', 'REPLACED_CPE')          as is_first_time_fix,
+    wo._cdc_action,
+    {{ dbt_loaded_at() }}                                   as _dbt_loaded_at
+from {{ cdc_source('care', 'work_order') }} wo
 left join {{ source('care', 'work_order_appointment') }} ap
        on ap.work_order_id = wo.work_order_id
+qualify row_number() over (partition by wo.work_order_id order by iff(wo._cdc_action = 'DELETE', 1, 0) desc, ap.slot_id) = 1

@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='detected_month',
+    on_schema_change='append_new_columns',
     cluster_by=['detected_month'],
     tags=['gold', 'aggregates', 'network', 'outage', 'e21']
 ) }}
@@ -27,6 +30,7 @@ o as (
     from {{ ref('fct_outage') }} f
     left join {{ ref('dim_region') }} r on r.region_id = f.region_id
     left join impact_mrr m            on m.incident_id = f.incident_id
+    where {{ f2_month_window("date_trunc('month', f.event_date)::date", 'detected_month') }}
 )
 select
     detected_month, severity, root_cause, island_group,

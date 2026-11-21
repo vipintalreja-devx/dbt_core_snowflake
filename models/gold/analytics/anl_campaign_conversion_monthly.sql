@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='send_month',
+    on_schema_change='append_new_columns',
     cluster_by=['send_month'],
     tags=['gold', 'analytics', 'marketing', 'campaigns', 'm09']
 ) }}
@@ -15,6 +18,9 @@ with resp as (
         r.is_opened, r.is_converted, r.hours_to_open
     from {{ ref('slv_campaign_response') }} r
     where r.event_date >= '{{ var("history_start_date") }}'::date
+      -- converters' 30-day post-send revenue keeps landing for a month after the send, so one
+      -- extra month is restated on every incremental run
+      and date_trunc('month', r.event_date)::date >= dateadd('month', -1, {{ f3_month_lower_bound('send_month') }})
 ),
 conv as (
     select response_id, campaign_id, send_month, subscription_id, sent_date

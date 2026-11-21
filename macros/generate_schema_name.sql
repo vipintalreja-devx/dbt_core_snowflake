@@ -1,13 +1,13 @@
 {#-
-  dev:  everything lands in your personal schema with a suffix (e.g. DBT_GRAIYANI_STAGING)
-  prod: custom schema is used as-is (e.g. STAGING, MARTS)
+  Every target writes <target.schema>_<custom>, e.g. DBT_TELCO + silver -> DBT_TELCO_SILVER.
+  The local dev target and the Snowflake-native prod target (dbt Projects on Snowflake,
+  OPS.TELCO_DBT) both use schema DBT_TELCO, so they build the same DBT_TELCO_* schemas;
+  a CI target can point target.schema elsewhere (e.g. DBT_CI) to build in isolation.
 -#}
 {% macro generate_schema_name(custom_schema_name, node) -%}
     {%- set default_schema = target.schema -%}
     {%- if custom_schema_name is none -%}
         {{ default_schema }}
-    {%- elif target.name == 'prod' -%}
-        {{ custom_schema_name | trim }}
     {%- else -%}
         {{ default_schema }}_{{ custom_schema_name | trim }}
     {%- endif -%}

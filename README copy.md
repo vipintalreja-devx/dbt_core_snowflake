@@ -504,6 +504,90 @@ transient / cluster_by / incremental strategy / unique_key / copy_grants / hooks
 | Reportability | `is_reportable` = not soft-deleted and not a test customer. Marts filter on it; facts keep everything. |
 | KPIs | ONE definition each: ARPU = revenue / avg(BOM, EOM) billable base; churn = BOM-base lines that end the month CHURNED / BOM base. |
 
+## Live estate: how the data keeps arriving (ops/)
+
+The estate behaves like a running telco. Every night one Snowflake task graph runs the whole chain:
+
+```
+OPS.T_ROOT  01:10 Asia/Manila (owner DBT_ROLE, warehouse ETL_WH)
+ └ T_INGEST       INGEST.SP_INGEST_DAY(yesterday)   source systems: inserts, updates, hard deletes, 1-3% late rows, 0.3% duplicates
+    └ T_LOAD_FILES INGEST.SP_LOAD_FILES(yesterday)  Snowpipe (CDR voice/data/SMS, XDR, payments) + exported-vs-loaded reconciliation
+                                                 + refresh of the 2 S3 external tables (vendor devices, partner rates)
+       ├ T_NATIVE  OPS.SP_RUN_NATIVE(yesterday)     health of NATIVE_PIPE (N01-N40, own root 03:15 Manila); PIPE / PIPE_X retired
+       └ T_FRESHNESS  EXECUTE DBT PROJECT ... source freshness   (error after 2 days without a load)
+          └ T_DBT_BUILD  EXECUTE DBT PROJECT OPS.TELCO_DBT 'build --target prod'
+             └ T_QA       OPS.SP_QA_CHECKS(yesterday)   arrival, Snowpipe reconciliation, bronze=silver, RLS coverage
+ T_FINALIZE (finalizer)  OPS.PIPELINE_RUN_LOG: one row per task + graph status
+BI_SIM.T_TABLEAU_REFRESH 07/12/17h as SVC_TABLEAU (TELCO_ANALYST_NCR)   BI_SIM.T_POWERBI_REFRESH 08:30/13:30 as SVC_POWERBI (TELCO_ANALYST_VISMIN)
+```
+
+| Piece | Where | What it does |
+|---|---|---|
+| Ingestor | `INGEST.SP_INGEST_DAY` (`ops/sql/02_ingest.sql`) | Replays the same weekday of September 2026 with a time shift into every feed: CDR/xDR/payment **files** to `@INGEST.STG_FEEDS/<feed>/<date>/<run_id>/`, direct DML for BSS/OSS tables, ticket/alarm/outage lifecycles that complete on later days, churn / win-back / suspensions / plan changes, payment allocation and invoice status, CDR voids and payment reversals (hard deletes), month-end bill cycle. One transaction per day; idempotent via `INGEST.FEED_WATERMARK`. |
+| Snowpipe | `INGEST.PIPE_*` | Internal stage, so the scheduler triggers `ALTER PIPE ... REFRESH` for the committed run's folder and waits until loaded rows = exported rows. |
+| External tables | `INGEST.EXT_DEVICE_FEED`, `INGEST.EXT_PARTNER_RATE` (`ops/sql/11_*`) | Daily vendor device JSON and partner rate CSV files on `s3://devx-telco-native-landing/ingest/` (integration `S3_TELCO_NATIVE`), partitioned by `dt=`. AUTO_REFRESH through the bucket's S3 event notifications, plus an explicit partition refresh in `T_LOAD_FILES`. dbt reads them as source `s3_feeds` in `slv_landing_device_feed` / `slv_landing_partner_rate`. |
+| Change detection | `CHANGE_TRACKING = TRUE` on 30 source tables | A table property: source shapes are unchanged. dbt reads `CHANGES(...) AT(last successful run)` and so sees inserts, updates **and deletes**. |
+| Native pipelines | `NATIVE_PIPE` / `NATIVE_MART` / `NATIVE_SNAP` (platform team), `OPS.SP_RUN_NATIVE` | **PIPE and PIPE_X are retired (2026-11-21)**: nothing calls them; their outputs are re-implemented in dbt. The new native pipelines N01-N40 run on their own root task (03:15 Manila, after this graph). `T_NATIVE` records their run log and failed tasks in `OPS.NATIVE_RUN_LOG`; QA warns on failures. `OPS.LEGACY_TASK_DECISIONS` records every retired task / schema. PIPE / PIPE_X objects are kept, not dropped. |
+| dbt in Snowflake | `OPS.TELCO_DBT` (dbt 1.12.3) | Deployed with `python ops/deploy_dbt_project.py` (bundle + `ops/snowflake_profiles.yml`). |
+| Governance | `ops/sql/05_governance.sql`, `seeds/region_access_map.csv`, `macros/governance.sql` | 3 regional analyst roles; map filled from the seed; `RAP_REGION` (region id) / `RAP_REGION_NAME` (region name) re-attached to every regional gold table after each build. Check with `python ops/verify_rls.py`. |
+| Lineage | `macros/lineage.sql`, `ops/sql/06_lineage.sql` | `OPS.LINEAGE_EDGES` (declared, republished every run), `OPS.V_ACCESS_LINEAGE` (observed from ACCESS_HISTORY), `OPS.V_LINEAGE_RECONCILE`, and `upstream:` in every object comment. |
+| Warehouses / cost | `ETL_WH` (Small), `BI_WH` (X-Small), resource monitor `TELCO_DAILY_RM` | Daily credit cap; notify 75%, suspend 100%. |
+
+### Incremental strategy (macros/cdc.sql)
+
+* **Things that happen are incremental; things that are stay tables; history comes from snapshots.**
+  Event feeds and their facts / daily / monthly aggregates are incremental (~ 2/3 of the models);
+  dims, masters (<= 600k rows) and "current state" outputs (`mart_subscriber_360`, tiers, profiles) are tables.
+* **Silver row models** (tag `cdc`) read bronze `CHANGES` since their watermark (`OPS.DBT_MODEL_WATERMARK`),
+  merge on the key, receive deletes as tombstones (`_cdc_action = 'DELETE'`), log them to
+  `OPS.DBT_CDC_DELETE_LOG` and purge them. Every run logs the event dates it touched to `OPS.DBT_CHANGED_DATES`.
+* **Silver aggregates** (revenue, cell KPI hourly, ONT daily, roaming, late fees) recompute only changed dates.
+* **Gold** keeps its window macros; their lower bound is widened to the earliest date changed in the model's
+  **own** upstream CDC models since its last success, so a CDR that arrives 5 days late is re-aggregated, and
+  a ticket update does not make the CDR marts reprocess. Row facts recompute only changed keys.
+* Fallback (first run, watermark older than retention, `--full-refresh`): the original lookback windows.
+* Window bounds are resolved to **literal dates** before a model runs, so Snowflake prunes the
+  event_date-clustered inputs (a scalar subquery in the WHERE clause would scan full history).
+* Generic tests on the 15 largest incremental tables check the **last 7 days** each run
+  (`vars: test_recent_window / test_recent_days`); run the full pass weekly:
+  `dbt test --vars '{test_recent_days: 0}'`.
+
+### Operating it
+
+```sql
+EXECUTE TASK TELCO_PROD_XL_V2.OPS.T_ROOT;                         -- run the whole chain now
+SELECT * FROM OPS.PIPELINE_RUN_LOG ORDER BY logged_at DESC;        -- graph history
+SELECT * FROM OPS.INGEST_RUN_LOG  WHERE business_date = CURRENT_DATE - 1;
+SELECT * FROM OPS.QA_RESULTS      WHERE business_date = CURRENT_DATE - 1;
+SELECT * FROM OPS.V_SOURCE_TO_MEDALLION;                           -- bronze schema -> medallion schema lineage
+CALL INGEST.SP_INGEST_DAY('2026-11-21'); CALL INGEST.SP_LOAD_FILES('2026-11-21');   -- one day by hand
+```
+
+After changing models: `python ops/deploy_dbt_project.py` (adds a new version of `OPS.TELCO_DBT`).
+Local builds on the pipeline warehouse: `dbt build --target etl` (the `etl` output in `~/.dbt/profiles.yml`).
+
+### Verified state (2026-11-21)
+
+| Check | Result |
+|---|---|
+| Backfill 2026-10-01 → 11-20 (51 business days) | 97.2M rows by DML + 43.3M rows by Snowpipe (CDR voice/data/SMS, XDR, payments); 1.0M updates; 18,155 hard deletes; 1–3% late CDRs/day; Oct 31 bill run: 454,920 invoices, 1.61M lines, 451k late fees |
+| Snowpipe reconciliation | exported rows = loaded rows on every day (the loader fails the run otherwise) |
+| Task graph run for 2026-11-20 (inside Snowflake) | 7 tasks, 0 failed: ingest → load → native (15 procs) → freshness → dbt build → QA → finalizer |
+| QA (`OPS.QA_RESULTS`) | bronze CDR voice/data distinct keys = silver rows (254,427 / 274,576); revenue ₱17,754,127.80 = ₱17,754,127.80; 0 unmapped regions; 46/46 regional gold tables carry a row access policy |
+| CDC | late CDRs re-aggregated back to 11-15; 310 voided CDRs deleted from silver and gold |
+| Row-level security (`ops/verify_rls.py`) | PASS: each analyst role sees only its regions in bronze + every regional gold table |
+| BI | 12 tagged dashboard queries ran as SVC_TABLEAU / SVC_POWERBI with their analyst roles on BI_WH |
+| External tables | 51 daily files each: 2,550 vendor device updates, 6,120 partner rate rows; S3 event notifications reach them |
+| Lineage | 720 declared edges from 138 upstream objects (catalog `OBJECT_DEPENDENCIES` had 35) |
+| Steady-state build | 8 min on Small; incremental models scan ~72 GB (was 350 GB before literal bounds) |
+| Materializations | 96 incremental, 71 table, 4 dynamic tables, 2 views, 6 snapshots |
+
+### Open items
+* `NATIVE_PIPE.TASK_N04_STREAM` (platform team) fails every 30 min: `SP_N04_CONSUME_STREAM` inserts `CDR_VOICE.CALL_START` (TIMESTAMP_TZ) into an LTZ column — fix is `CALL_START::TIMESTAMP_LTZ`. QA reports it as WARN.
+* PIPE / PIPE_X streams are no longer consumed and will go stale; drop the schemas when the team signs off.
+* **Failure alerts:** the finalizer logs every run; email needs a notification integration + verified address.
+* `TELCO_COMPUTE_RM` (pre-existing monitor on COMPUTE_WH) is over its quota, so the `dev` target cannot resume COMPUTE_WH until it resets; use `--target etl`.
+
 ## Production deployment
 
 1. Add a `prod` output to the `my_project` profile (service user, key-pair auth, role `DBT_ROLE`,
@@ -542,6 +626,7 @@ M34/M35 (file export/round-trip mechanics), G1/G5–G8 and P2/P5 (duplicate exis
   account-months are `EARNED_MISMATCH`. Needs the billing owner; the procedures show the same (72%).
 * Bronze feeds end 2026-09-30; `dbt source freshness` will warn until ingestion resumes.
 * `REF.GEO_REGION` id 2 has no name → `UNKNOWN`.
+* FX history (`REF.CURRENCY_RATE`) starts 2024-01-01 but roaming starts 2023-10 → 964k roaming rows have no USD→PHP rate (warn test).
 * `USAGE.USAGE_DAILY_AGG` (legacy pre-aggregate) reports ~6x the data volume of `CDR_DATA` — not trustworthy.
 * Campaign targeting JSON references plan codes (P01–P20) that don't exist in the plan catalog.
 * Outage credits: ~348k account-months owed PHP 167k in credits with nothing granted.

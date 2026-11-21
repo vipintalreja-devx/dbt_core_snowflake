@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='event_date',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -10,6 +13,7 @@ with outages as (
     select region_id, event_date, count(*) as outages, sum(outage_minutes) as outage_minutes,
            sum(impacted_lines) as impacted_lines
     from {{ ref('fct_outage') }}
+    where event_date >= {{ f1_lower_bound('event_date') }}
     group by 1, 2
 )
 select
@@ -32,4 +36,5 @@ select
 from {{ ref('fct_cell_kpi_daily') }} k
 join {{ ref('dim_cell') }} c on c.cell_id = k.cell_id
 left join outages o on o.region_id = c.region_id and o.event_date = k.event_date
+where k.event_date >= {{ f1_lower_bound('event_date') }}
 group by 1, 2, 3

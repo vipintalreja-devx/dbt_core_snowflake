@@ -6,6 +6,7 @@
     copy_grants=true,
     post_hook="alter table {{ this }} set comment = 'Gold dimension - dim_plan (rebuilt {{ run_started_at.strftime(\'%Y-%m-%d %H:%M\') }} UTC)'"
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- Current tariff plan attributes + current subscriber base on the plan.
 with base as (
     select plan_id, count(*) as active_lines

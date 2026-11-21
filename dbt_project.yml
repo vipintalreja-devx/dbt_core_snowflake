@@ -12,14 +12,45 @@ snapshot-paths: ["snapshots"]
 
 clean-targets: ["target", "dbt_packages"]
 
+# CDC control tables + per-model watermarks (see macros/cdc.sql)
+on-run-start:
+  - "{{ cdc_create_control_table('DBT_MODEL_WATERMARK') }}"
+  - "{{ cdc_create_control_table('DBT_CHANGED_DATES') }}"
+  - "{{ cdc_create_control_table('DBT_CDC_DELETE_LOG') }}"
+on-run-end:
+  - "{{ cdc_record_watermarks(results) }}"
+  - "{{ publish_lineage() }}"
+  - "{{ comment_upstreams(results) }}"
+
 vars:
   # Business timezone: all event_date / *_local columns are Asia/Manila business days.
   local_tz: 'Asia/Manila'
   # First business date loaded into incremental silver/gold models on a full refresh.
   # dev default keeps XS-warehouse builds fast; prod sets this to '2023-10-01' (full history).
-  history_start_date: '2026-08-01'
-  # Days re-processed on every incremental run to absorb late-arriving CDRs/revenue.
+  history_start_date: '2023-10-01'
+  # Minimum days re-processed on every incremental run. Late rows older than this are
+  # still picked up: windows widen to the earliest date changed upstream (macros/cdc.sql).
   lookback_days: 3
+  # Set to false to fall back to the plain lookback windows (no CDC widening).
+  cdc_enabled: true
+  # Tests on these large incremental tables check the last N days each run (0 = full history).
+  test_recent_days: 7
+  test_recent_window:
+    slv_cdr_voice: event_date
+    slv_cdr_data: event_date
+    slv_cdr_sms: event_date
+    slv_xdr_session: event_date
+    slv_daily_revenue: business_date
+    slv_ont_health_daily: event_date
+    slv_cell_kpi_hourly: event_date
+    slv_recharge: event_date
+    slv_campaign_response: event_date
+    fct_subscriber_usage_daily: event_date
+    fct_revenue_daily: business_date
+    fct_recharge: event_date
+    fct_campaign_response: event_date
+    anl_xdr_events: event_date
+    adv_revenue_leakage_daily: usage_date
   # Churn-risk banding thresholds (single governed definition)
   churn_high_threshold: 0.7
   churn_medium_threshold: 0.4
@@ -42,6 +73,10 @@ models:
       +schema: gold
       +materialized: table
       +tags: ['gold']
+      # regional row-level security re-attached after every build (macros/governance.sql)
+      +post-hook:
+        - "{{ rap_region_drop() }}"
+        - "{{ rap_region_add() }}"
       aggregates:
         +tags: ['gold', 'aggregates']
       analytics:
@@ -57,6 +92,11 @@ seeds:
   telco:
     +schema: silver
     +tags: ['seed']
+    region_access_map:
+      +tags: ['seed', 'governance']
+      +post-hook:
+        - "{{ sync_region_access_map_delete() }}"
+        - "{{ sync_region_access_map_insert() }}"
 
 data_tests:
   telco:

@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='response_month',
+    on_schema_change='append_new_columns',
     tags=['gold', 'analytics', 'care', 'nps', 'm22']
 ) }}
 -- NPS and survey-driver scores per month, survey version and home region, split by whether the
@@ -19,6 +22,7 @@ with s as (
     from {{ ref('slv_nps_survey') }} n
     left join {{ ref('fct_ticket') }} t             on t.ticket_id = n.ticket_id
     left join {{ ref('int_subscriber_profile') }} p on p.subscription_id = n.subscription_id
+    where {{ f2_month_window("date_trunc('month', n.response_date)::date", 'response_month') }}
 )
 select
     response_month,

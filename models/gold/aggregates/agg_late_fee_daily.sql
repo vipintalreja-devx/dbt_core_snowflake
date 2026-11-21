@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='assessment_date',
+    on_schema_change='append_new_columns',
     cluster_by=['assessment_date'],
     tags=['gold', 'aggregates', 'billing', 'e06']
 ) }}
@@ -22,7 +25,7 @@ fees as (
     left join {{ ref('slv_invoice') }} i on i.invoice_id = l.invoice_id
     left join acct_region ar            on ar.account_id = l.account_id
     left join {{ ref('dim_region') }} r on r.region_id = ar.region_id
-    where l.assessment_date >= '{{ var("history_start_date") }}'::date
+    where l.assessment_date >= {{ f1_lower_bound('assessment_date') }}
 )
 select
     assessment_date, rule_code, region_name,

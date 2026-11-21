@@ -9,7 +9,7 @@
 -- device x specification key, and compared with the device catalogue.
 -- Ported from telco_v2_core p4_device_feed (was a view with LATERAL FLATTEN over SPECS).
 -- Grain: device_id x spec_key (array-valued specs are kept as JSON text + element count).
--- Sources (2): landing.device_feed_raw (bronze), slv_device.
+-- Sources (3): landing.device_feed_raw (bronze), s3_feeds.ext_device_feed (S3 external table), slv_device.
 with feed as (
     select
         f.raw:device_id::number                                 as device_id,
@@ -21,7 +21,13 @@ with feed as (
         f.raw:specs                                             as specs,
         f.file_name,
         {{ tz_to_utc('f.loaded_at') }}                          as loaded_at_utc
-    from {{ source('landing', 'device_feed_raw') }} f
+    from (
+        -- legacy COPY INTO landing table + daily vendor files read in place through the S3 external table
+        select raw, file_name, loaded_at from {{ source('landing', 'device_feed_raw') }}
+        union all
+        select raw, file_name, dateadd('hour', 1, feed_date::timestamp_ltz) as loaded_at
+          from {{ source('s3_feeds', 'ext_device_feed') }}
+    ) f
     qualify row_number() over (partition by f.raw:device_id::number order by f.loaded_at desc) = 1
 ),
 flat as (

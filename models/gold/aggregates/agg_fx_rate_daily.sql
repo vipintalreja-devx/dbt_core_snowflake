@@ -3,6 +3,7 @@
     cluster_by=['rate_date'],
     tags=['gold', 'aggregates', 'ref', 'finance', 'fx', 'e26']
 ) }}
+-- Materialization: table (current-state/small reference): small reference (10k FX rates).
 -- FX rate to PHP for every calendar day x currency (rates carried forward over gaps with an
 -- ASOF JOIN), with day-over-day move and 30-day volatility.
 -- Ported from x_e26_fx_rate_daily (PIPE_X.SP_X_E26_FX_RATE_DAILY).

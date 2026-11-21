@@ -3,6 +3,7 @@
     cluster_by=['as_of_date'],
     tags=['gold', 'aggregates', 'ref', 'product', 'e25']
 ) }}
+-- Materialization: table (current-state/small reference): every day carries the CURRENT base per plan (int_subscriber_profile), so all days change on every run.
 -- Tariff plans on sale per day x contract type x internet service, with the current base on them.
 -- Ported from x_e25_plan_active_daily (PIPE_X.SP_X_E25_PLAN_ACTIVE_DAILY); a date spine replaces the
 -- single run_date so every day in the window is present.

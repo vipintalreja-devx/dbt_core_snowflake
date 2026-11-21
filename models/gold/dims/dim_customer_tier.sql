@@ -5,6 +5,7 @@
     tags=['gold', 'dims', 'customer', 'g3'],
     transient=false
 ) }}
+-- Materialization: table (current-state/small reference): dimension (small, current state; history comes from the SCD2 snapshots).
 -- Customer value tier (PLATINUM / GOLD / SILVER / BRONZE) from revenue, usage, engagement,
 -- payment behaviour and care load over the loaded window.
 -- Ported from telco_v2_core g3_dim_customer_tier (PIPE.SP_GOLD_CUSTOMER_TIER); repointed from

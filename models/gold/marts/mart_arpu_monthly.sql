@@ -1,5 +1,8 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='delete+insert',
+    unique_key='month_start',
+    on_schema_change='append_new_columns',
     schema='gold',
     tags=['gold', 'marts', 'kpi'],
     transient=false,
@@ -27,4 +30,5 @@ select
     round(div0(sum(m.voice_min), count_if(m.is_usage_active)), 1)       as mou_per_active_line
 from {{ ref('fct_subscriber_monthly') }} m
 where m.is_reportable
+  and {{ f2_month_window('m.month_start', 'month_start') }}
 group by 1, 2, 3

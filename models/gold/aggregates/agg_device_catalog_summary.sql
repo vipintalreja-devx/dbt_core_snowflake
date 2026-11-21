@@ -2,6 +2,7 @@
     materialized='table',
     tags=['gold', 'aggregates', 'ref', 'device', 'snapshot', 'e24']
 ) }}
+-- Materialization: table (current-state/small reference): current-state snapshot of a small reference/master table - rebuilt in seconds.
 -- Device catalogue per manufacturer x device type (launched to date) with installed base on the network.
 -- Ported from x_e24_device_catalog_summary (PIPE_X.SP_X_E24_DEVICE_CATALOG_SUMMARY).
 -- Grain   : manufacturer x device_type   (current state)

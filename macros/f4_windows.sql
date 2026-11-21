@@ -16,7 +16,7 @@
         dateadd('month', -11, month_start)                  as year_start
     from (select distinct month_start from {{ ref('int_subscriber_month_status') }}) ms
     {%- if is_incremental() %}
-    where month_start >= (select coalesce(dateadd('month', -1, max({{ target_col }})), '1900-01-01'::date) from {{ this }})
+    where month_start >= {{ cdc_widen_month("(select coalesce(dateadd('month', -1, max(" ~ target_col ~ ")), '1900-01-01'::date) from " ~ this ~ ")") }}
     {%- endif %}
 {%- endmacro %}
 
@@ -30,7 +30,7 @@
     where d.date_day >= '{{ var("history_start_date") }}'::date
       and d.date_day <= {{ max_date_sql or "(select max(event_date) from " ~ ref('fct_subscriber_usage_daily') ~ ")" }}
     {%- if is_incremental() %}
-      and d.date_day >= (select coalesce(dateadd('day', -{{ var('lookback_days') }}, max({{ target_col }})), '1900-01-01'::date) from {{ this }})
+      and d.date_day >= {{ cdc_widen("(select coalesce(dateadd('day', -" ~ var('lookback_days') ~ ", max(" ~ target_col ~ ")), '1900-01-01'::date) from " ~ this ~ ")") }}
     {%- endif %}
 {%- endmacro %}
 
