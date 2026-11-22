@@ -22,15 +22,18 @@ CREATE TABLE IF NOT EXISTS OPS.PIPELINE_RUN_LOG (
 CREATE OR REPLACE PROCEDURE OPS.SP_FINALIZE()
 RETURNS VARCHAR
 LANGUAGE SQL
-COMMENT = 'Task-graph finalizer: one OPS.PIPELINE_RUN_LOG row per task of the current graph run'
+COMMENT = 'Task-graph finalizer: one OPS.PIPELINE_RUN_LOG row per task of the current graph run; raises an error when any task failed'
 EXECUTE AS CALLER
 AS
 $$
 DECLARE
+  graph_failed EXCEPTION (-20001, 'telco_daily graph FAILED: one or more tasks failed or were cancelled; see OPS.PIPELINE_RUN_LOG');
   gid VARCHAR;
   bdate DATE DEFAULT DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE);
   n_failed INTEGER;
   n_total INTEGER;
+  failures VARCHAR;
+  dbt_secs NUMBER(10,1);
 BEGIN
   gid := (SELECT SYSTEM$TASK_RUNTIME_INFO('CURRENT_TASK_GRAPH_RUN_GROUP_ID'));
   INSERT INTO OPS.PIPELINE_RUN_LOG (GRAPH_RUN_GROUP_ID, BUSINESS_DATE, TASK_NAME, STATE, STARTED_AT, COMPLETED_AT, SECONDS, ERROR_MESSAGE, RETURN_VALUE)
@@ -44,7 +47,26 @@ BEGIN
     FROM OPS.PIPELINE_RUN_LOG WHERE graph_run_group_id = :gid;
   INSERT INTO OPS.PIPELINE_RUN_LOG (GRAPH_RUN_GROUP_ID, BUSINESS_DATE, TASK_NAME, STATE, RETURN_VALUE)
   VALUES (:gid, :bdate, 'GRAPH', IFF(:n_failed = 0, 'SUCCEEDED', 'FAILED'), :n_total || ' tasks, ' || :n_failed || ' failed');
-  RETURN 'graph ' || gid || ': ' || n_total || ' tasks, ' || n_failed || ' failed';
+  -- Slack: COMPLETED or FAILED (with the failing tasks); the notifier never fails the finalizer
+  SELECT COALESCE(LISTAGG(task_name || ': ' || LEFT(REGEXP_REPLACE(COALESCE(error_message, state), '\\x1b\\[[0-9;]*m', ''), 160), '\n'), '')
+    INTO :failures FROM OPS.PIPELINE_RUN_LOG
+   WHERE graph_run_group_id = :gid AND task_name <> 'GRAPH' AND state IN ('FAILED', 'CANCELLED');
+  SELECT COALESCE(MAX(IFF(task_name = 'T_DBT_BUILD', seconds, NULL)), 0) INTO :dbt_secs
+    FROM OPS.PIPELINE_RUN_LOG WHERE graph_run_group_id = :gid;
+  IF (n_failed > 0) THEN
+    CALL OPS.SP_NOTIFY_PIPELINE('FAILED', :n_failed || ' of ' || :n_total || ' tasks failed:\n' || :failures
+                                || '\nGold is NOT current - see OPS.V_PIPELINE_STATUS');
+  ELSE
+    CALL OPS.SP_NOTIFY_PIPELINE('COMPLETED', :n_total || ' tasks succeeded; dbt build ' || ROUND(:dbt_secs / 60, 1)
+                                || ' min; QA passed; gold is current');
+  END IF;
+
+  -- Fail loudly: the run log is written first, then the finalizer itself fails, so task
+  -- history, monitoring and anything polling T_FINALIZE see the failure too.
+  IF (n_failed > 0) THEN
+    RAISE graph_failed;
+  END IF;
+  RETURN 'graph ' || gid || ': ' || n_total || ' tasks, 0 failed';
 END;
 $$;
 
@@ -56,7 +78,7 @@ CREATE OR REPLACE TASK OPS.T_ROOT
   USER_TASK_TIMEOUT_MS = 14400000
   CONFIG = '{"pipeline": "telco_daily"}'
   COMMENT = 'Daily telco pipeline: ingest -> snowpipe -> native pipelines -> dbt build -> QA'
-AS SELECT 'telco_daily for ' || DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE);
+AS CALL OPS.SP_NOTIFY_PIPELINE('STARTED', 'ingest -> snowpipe -> native health -> dbt build -> QA');
 
 CREATE OR REPLACE TASK OPS.T_INGEST WAREHOUSE = ETL_WH
   COMMENT = 'Source systems: one business day of inserts / updates / deletes / late rows'

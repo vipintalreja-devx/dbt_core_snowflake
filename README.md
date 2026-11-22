@@ -715,6 +715,16 @@ BI_SIM.T_TABLEAU_REFRESH 07/12/17h as SVC_TABLEAU (TELCO_ANALYST_NCR)   BI_SIM.T
 `dq_threshold_unit_conversion`, `dq_unit_profile` and `adv_cell_anomaly`. dbt no longer depends on `DBT_V2_RAW`;
 the schema itself was dropped on 2026-11-22 (nothing in dbt or the native pipelines read it).
 
+### Pipeline notifications (Slack) and gold status
+* **Slack** (`ops/sql/15_slack_notifications.sql`): `T_ROOT` posts ▶️ STARTED, `T_FINALIZE` posts ✅ COMPLETED
+  (tasks, dbt build time) or ❌ FAILED (each failing task + reason). Event-driven: no polling, no hourly
+  messages. Integration `TELCO_SLACK` (webhook), secret `OPS.SLACK_TELCO_WEBHOOK` (webhook path kept only in
+  Snowflake), notifier `OPS.SP_NOTIFY_PIPELINE` — it can never fail the pipeline. Delivery log:
+  `INFORMATION_SCHEMA.NOTIFICATION_HISTORY`.
+* **Failure is loud**: after logging, `T_FINALIZE` raises when any task failed, so task history shows FAILED.
+* **Is gold current?** `OPS.V_PIPELINE_STATUS` (latest run, failures, last clean run, `IS_GOLD_CURRENT`).
+  The BI refresh procedures read it first and tag every dashboard query `bi:<tool>:<dashboard>|data=current|stale`.
+
 ### dbt ↔ native seam test
 `tests/singular/assert_native_n04_matches_cdr_voice.sql` (warn, failures stored) compares the native
 N04 capture (`NATIVE_MART.N04_VOICE_INBOX`, dbt source `native_mart`) with `USAGE.CDR_VOICE` by

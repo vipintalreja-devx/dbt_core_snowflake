@@ -41,29 +41,31 @@ COMMENT = 'Tableau dashboards: Executive KPI, Churn, Network Quality, Outages, R
 EXECUTE AS CALLER
 AS
 $$
-DECLARE n INTEGER DEFAULT 0; c INTEGER;
+DECLARE n INTEGER DEFAULT 0; c INTEGER; fresh VARCHAR DEFAULT 'stale'; tag VARCHAR;
 BEGIN
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:executive_kpi';
+  -- Check the pipeline first: every dashboard query is tagged data=current or data=stale.
+  SELECT IFF(COALESCE(MAX(is_gold_current), FALSE), 'current', 'stale') INTO :fresh FROM TELCO_PROD_XL_V2.OPS.V_PIPELINE_STATUS;
+  tag := 'bi:tableau:executive_kpi|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT month_start, region_name, SUM(revenue_php) revenue, SUM(revenue_php) / NULLIF(SUM(base_avg), 0) arpu
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.MART_ARPU_MONTHLY WHERE month_start >= DATEADD('month', -6, CURRENT_DATE()) GROUP BY 1, 2); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:churn';
+  tag := 'bi:tableau:churn|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT month_start, region_name, contract_type, churn_rate_pct, churned_lines, net_adds
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.MART_CHURN_MONTHLY WHERE month_start >= DATEADD('month', -6, CURRENT_DATE())); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:network_quality';
+  tag := 'bi:tableau:network_quality|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT event_date, region_name, pct_cells_degraded, drop_rate_pct_avg, throughput_mbps_avg, outages
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.MART_NETWORK_QUALITY_DAILY WHERE event_date >= DATEADD('day', -14, CURRENT_DATE())); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:outages';
+  tag := 'bi:tableau:outages|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT region_name, severity, root_cause, COUNT(*) incidents, SUM(outage_minutes) minutes, SUM(impacted_lines) lines
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.FCT_OUTAGE WHERE event_date >= DATEADD('day', -30, CURRENT_DATE()) GROUP BY 1, 2, 3); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:revenue_trend';
+  tag := 'bi:tableau:revenue_trend|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT r.business_date, s.home_region_name, SUM(r.total_revenue_php) revenue
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.FCT_REVENUE_DAILY r JOIN TELCO_PROD_XL_V2.DBT_TELCO_GOLD.DIM_SUBSCRIBER s ON s.subscription_id = r.subscription_id
     WHERE r.business_date >= DATEADD('day', -30, CURRENT_DATE()) GROUP BY 1, 2); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:tableau:cell_anomalies';
+  tag := 'bi:tableau:cell_anomalies|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT kpi_date, region_name, site_name, anomaly_cause, severity_score
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.ADV_CELL_ANOMALY WHERE kpi_date >= DATEADD('day', -7, CURRENT_DATE()) AND is_robust_anomaly); n := n + c;
   ALTER SESSION UNSET QUERY_TAG;
-  RETURN 'tableau refresh: 6 dashboards, ' || n || ' rows';
+  RETURN 'data=' || fresh || ' | tableau refresh: 6 dashboards, ' || n || ' rows';
 END;
 $$;
 
@@ -83,29 +85,31 @@ COMMENT = 'Power BI datasets: AR Aging, Collections, Campaigns, ARPU Tiers, Care
 EXECUTE AS CALLER
 AS
 $$
-DECLARE n INTEGER DEFAULT 0; c INTEGER;
+DECLARE n INTEGER DEFAULT 0; c INTEGER; fresh VARCHAR DEFAULT 'stale'; tag VARCHAR;
 BEGIN
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:ar_aging';
+  -- Check the pipeline first: every dashboard query is tagged data=current or data=stale.
+  SELECT IFF(COALESCE(MAX(is_gold_current), FALSE), 'current', 'stale') INTO :fresh FROM TELCO_PROD_XL_V2.OPS.V_PIPELINE_STATUS;
+  tag := 'bi:powerbi:ar_aging|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT month_end, aging_bucket, open_invoices, outstanding_php
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.MART_AR_AGING_MONTHLY WHERE month_end >= DATEADD('month', -6, CURRENT_DATE())); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:collections';
+  tag := 'bi:powerbi:collections|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT payment_date, payment_channel, COUNT(*) payments, SUM(payment_amount_php) amount, COUNT_IF(is_late) late
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.FCT_PAYMENT WHERE payment_date >= DATEADD('day', -30, CURRENT_DATE()) GROUP BY 1, 2); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:campaigns';
+  tag := 'bi:powerbi:campaigns|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT send_month, channel, campaign_name, conversion_rate, uplift_roi
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.ANL_CAMPAIGN_CONVERSION_MONTHLY WHERE send_month >= DATEADD('month', -3, CURRENT_DATE())); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:arpu_tiers';
+  tag := 'bi:powerbi:arpu_tiers|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT revenue_month, region_name, arpu_php, arpu_tier, arpu_rank
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.ANL_ARPU_REGION_TIER_MONTHLY); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:care_sla';
+  tag := 'bi:powerbi:care_sla|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT opened_date, category, priority, sla_attainment_pct, avg_nps_score
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.MART_CARE_SLA_DAILY WHERE opened_date >= DATEADD('day', -30, CURRENT_DATE())); n := n + c;
-  ALTER SESSION SET QUERY_TAG = 'bi:powerbi:cell_kpis';
+  tag := 'bi:powerbi:cell_kpis|data=' || fresh; EXECUTE IMMEDIATE 'ALTER SESSION SET QUERY_TAG = ''' || tag || '''';
   SELECT COUNT(*) INTO :c FROM (SELECT k.event_date, c.region_name, COUNT_IF(k.is_degraded) degraded_cells, AVG(k.drop_rate_pct_avg) drop_rate
     FROM TELCO_PROD_XL_V2.DBT_TELCO_GOLD.FCT_CELL_KPI_DAILY k JOIN TELCO_PROD_XL_V2.DBT_TELCO_GOLD.DIM_CELL c ON c.cell_id = k.cell_id
     WHERE k.event_date >= DATEADD('day', -14, CURRENT_DATE()) GROUP BY 1, 2); n := n + c;
   ALTER SESSION UNSET QUERY_TAG;
-  RETURN 'powerbi refresh: 6 datasets, ' || n || ' rows';
+  RETURN 'data=' || fresh || ' | powerbi refresh: 6 datasets, ' || n || ' rows';
 END;
 $$;
 
