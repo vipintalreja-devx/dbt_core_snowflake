@@ -23,7 +23,7 @@ with u as (
 conv as (
     select from_unit, trim(from_unit) as from_unit_trimmed, to_unit, factor, offset_value, description,
            count(*) over (partition by trim(lower(from_unit))) as variants_of_same_unit
-    from {{ source('ext', 'unit_conversion') }}
+    from {{ source('ref', 'unit_conversion') }}
 )
 select
     u.unit,

@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: int_p11_campaign_treated
+    description: "P11 step 1 - treated lines per campaign and send month (first send date, opened, converted) with the matching stratum: region x plan category x churn band x tenure band."
+    columns:
+      - name: stratum_key
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['campaign_id', 'subscription_id', 'send_month']}
+
+  - name: int_p11_control_stratum_daily
+    description: "P11 step 2 - daily revenue of the untargeted control pool per stratum, from 31 days before to 31 days after each send month."
+    columns:
+      - name: pool_lines
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['send_month', 'stratum_key', 'business_date']}
+
+  - name: fct_p11_campaign_uplift
+    description: "P11 output 1 - stratified difference-in-differences revenue uplift per campaign and send month: treated vs control change per line, t-stat, significance, incremental revenue, allocated budget and incremental ROI."
+    columns:
+      - name: campaign_id
+        data_tests: [not_null]
+      - name: matched_share
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['campaign_id', 'send_month']}
+
+  - name: mart_p11_channel_incrementality
+    description: "P11 output 2 - incremental revenue, ROI and share of significantly positive / negative campaigns per channel and month (complete post windows only)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['channel', 'send_month']}

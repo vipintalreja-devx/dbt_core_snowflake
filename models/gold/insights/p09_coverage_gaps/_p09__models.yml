@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: int_p09_service_location
+    description: "P09 step 1 - fixed-service locations with H3 cells (res 6/7/8), FTTH chain resolved to the serving OLT and distance to the nearest OLT."
+    columns:
+      - name: service_instance_id
+        data_tests: [unique, not_null]
+      - name: service_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['FTTH', 'DSL']}}
+
+  - name: int_p09_location_mobile_coverage
+    description: "P09 step 2 - mobile coverage per service location: cell polygons containing it (H3_COVERAGE + ST_CONTAINS), nearest cell and nearest 5G cell."
+    columns:
+      - name: service_instance_id
+        data_tests: [unique, not_null]
+
+  - name: fct_p09_ont_health_barangay_daily
+    description: "P09 step 3 - FTTH optical health per barangay and day: degraded ONT share, Rx power p05, overheating ONTs, distance-vs-Rx correlation."
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: degraded_share
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['city', 'barangay', 'event_date']}
+
+  - name: mart_p09_coverage_gaps
+    description: "P09 output 1 - coverage and fixed-network gap per barangay: mobile / 5G coverage share, distance to sites, FTTH optical health, DSL lines near fibre, gap score, gap type and rank."
+    columns:
+      - name: gap_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['NO_MOBILE_COVERAGE', 'FIBER_EXPANSION', 'FTTH_QUALITY', 'FAR_FROM_SITE', 'OK']}}
+      - name: mobile_covered_share
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['city', 'barangay']}
+
+  - name: mart_p09_coverage_h3
+    description: "P09 output 2 - H3 resolution-7 hexagon grid for coverage maps: lines, coverage share, sites in hex, FTTH health, boundary WKT."
+    columns:
+      - name: h3_r7
+        data_tests: [unique, not_null]

@@ -1,0 +1,30 @@
+version: 2
+models:
+  - name: int_p02_churn_events
+    description: "P02: every move of a line into CHURNED with region, plan, tenure and the 3-month average revenue before churn."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [subscription_id, churn_date]}}
+  - name: int_p02_precursor_events
+    description: "P02: event stream of the 90 days before each churn: tickets, SLA breaches, POOR network days, outages, bill shock, late payments, suspensions."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [subscription_id, churn_date, event_date, event_type]}}
+    columns:
+      - name: event_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['TICKET', 'TICKET_SLA_BREACH', 'POOR_NETWORK', 'OUTAGE', 'BILL_SHOCK', 'LATE_PAYMENT', 'SUSPENDED']}}
+  - name: fct_p02_churn_attribution
+    description: "P02: one row per churn with recency-weighted cause scores, the MATCH_RECOGNIZE journey (NETWORK_SPIRAL / BILLING_SPIRAL / SERVICE_FAILURE) and the primary root cause."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [subscription_id, churn_date]}}
+    columns:
+      - name: root_cause
+        data_tests:
+          - not_null
+          - accepted_values: {arguments: {values: ['NETWORK', 'SERVICE', 'BILLING', 'UNEXPLAINED']}}
+      - name: root_cause_confidence
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+  - name: mart_p02_churn_root_cause_monthly
+    description: "P02: churned lines and lost monthly revenue by month, region, contract type and root cause."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [churn_month, region_name, contract_type, root_cause]}}

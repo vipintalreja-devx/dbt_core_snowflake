@@ -1,0 +1,38 @@
+version: 2
+models:
+  - name: int_p01_subscriber_cell_day
+    description: "P01: network usage per line, day and serving cell (voice minutes, data MB, usage weight). Rolling window var insights_daily_days."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [subscription_id, event_date, cell_id]}}
+  - name: int_p01_cell_day_quality
+    description: "P01: 0-100 quality score per cell and day from PM breaches, critical alarm minutes and regional outages."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [cell_id, event_date]}}
+    columns:
+      - name: cell_quality_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+  - name: fct_p01_experience_daily
+    description: "P01: customer experience score per line and day (usage-weighted cell quality, outage and network-ticket penalties) with GOOD / FAIR / POOR band."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [subscription_id, event_date]}}
+    columns:
+      - name: experience_score
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+      - name: experience_band
+        data_tests:
+          - accepted_values: {arguments: {values: ['GOOD', 'FAIR', 'POOR']}}
+  - name: mart_p01_experience_region_daily
+    description: "P01: experience KPIs per region and day: average and P10 score, % POOR / GOOD lines, outage line-minutes, 7-day trend."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [event_date, region_id]}}
+  - name: dim_p01_subscriber_experience
+    description: "P01: current 30-day experience profile per line, trend, worst day, and recommended action (SAVE_NOW / FIX_NETWORK / WATCH_DECLINE / OK)."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: experience_action
+        data_tests:
+          - accepted_values: {arguments: {values: ['SAVE_NOW', 'FIX_NETWORK', 'WATCH_DECLINE', 'OK']}}

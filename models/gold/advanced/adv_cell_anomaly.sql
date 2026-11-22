@@ -159,7 +159,7 @@ thresholds AS (
         th.critical_threshold * COALESCE(uc.factor, 1) + COALESCE(uc.offset_value, 0) AS critical_threshold,
         TRIM(th.unit)                                               AS unit
     FROM {{ source('network', 'cell_kpi_threshold') }} th
-    LEFT JOIN {{ source('ext', 'unit_conversion') }} uc
+    LEFT JOIN {{ source('ref', 'unit_conversion') }} uc
            ON TRIM(uc.from_unit) = TRIM(th.unit)
           AND uc.to_unit IN ('Mbit/s', 'ms', '%')
     WHERE COALESCE(th.is_enabled, TRUE)

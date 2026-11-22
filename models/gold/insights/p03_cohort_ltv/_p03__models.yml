@@ -1,0 +1,35 @@
+version: 2
+models:
+  - name: int_p03_cohort_members
+    description: "P03: acquisition cohort (activation month) and LTV segment of every reportable line."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: cohort_month
+        data_tests: [not_null]
+  - name: fct_p03_cohort_month
+    description: "P03: per cohort, activity month, contract type and region: lines observed, in base, churned, revenue and data."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [cohort_month, activity_month, contract_type, region_name]}}
+    columns:
+      - name: cohort_age_months
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+  - name: mart_p03_cohort_retention
+    description: "P03: Kaplan-Meier survival curve, observed retention and cumulative revenue per acquired line by cohort and contract type."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {arguments: {combination_of_columns: [cohort_month, contract_type, cohort_age_months]}}
+    columns:
+      - name: survival_rate
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+  - name: mart_p03_ltv_segment
+    description: "P03: ARPU, monthly churn hazard, expected lifetime and discounted LTV per segment (contract x plan category x island group)."
+    columns:
+      - name: ltv_segment
+        data_tests: [unique, not_null]
+  - name: dim_p03_subscriber_ltv
+    description: "P03: projected remaining lifetime value and LTV decile per active line (segment hazard adjusted by the line's churn score)."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]

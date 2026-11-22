@@ -33,6 +33,9 @@ vars:
   lookback_days: 3
   # Set to false to fall back to the plain lookback windows (no CDC widening).
   cdc_enabled: true
+  # Insight pipelines (models/*/insights): subscriber x day outputs keep a rolling window,
+  # monthly / entity outputs cover the full loaded history.
+  insights_daily_days: 120
   # Tests on these large incremental tables check the last N days each run (0 = full history).
   test_recent_days: 7
   test_recent_window:
@@ -69,6 +72,8 @@ models:
         +tags: ['silver', 'dq']
       landing:
         +tags: ['silver', 'landing']
+      insights:
+        +tags: ['silver', 'insights']
     gold:
       +schema: gold
       +materialized: table
@@ -83,6 +88,8 @@ models:
         +tags: ['gold', 'analytics']
       advanced:
         +tags: ['gold', 'advanced']
+      insights:
+        +tags: ['gold', 'insights']
 
 snapshots:
   telco:

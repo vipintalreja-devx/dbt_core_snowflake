@@ -1,0 +1,23 @@
+cost_type,cost_key,unit,cost_php,assumption
+TICKET,HOTLINE,per ticket,95.00,ASSUMPTION: ~12 min agent handling at PHP 475/h fully loaded
+TICKET,CHAT,per ticket,45.00,ASSUMPTION: concurrent chat sessions (~3 per agent)
+TICKET,EMAIL,per ticket,55.00,ASSUMPTION: back-office email queue
+TICKET,APP,per ticket,12.00,ASSUMPTION: self-service in-app flow incl. platform cost
+TICKET,STORE,per ticket,140.00,ASSUMPTION: walk-in handling incl. store overhead
+PRIORITY,P1,multiplier,1.60,ASSUMPTION: P1 handled by senior tier
+PRIORITY,P2,multiplier,1.30,ASSUMPTION
+PRIORITY,P3,multiplier,1.00,ASSUMPTION: baseline
+PRIORITY,P4,multiplier,0.80,ASSUMPTION
+NOTE,AGENT,per note,18.00,ASSUMPTION: ~2 min agent follow-up
+NOTE,TL,per note,35.00,ASSUMPTION: team-lead review
+NOTE,TECH,per note,25.00,ASSUMPTION: technician remote note
+NOTE,BOT,per note,1.50,ASSUMPTION: automated triage note
+REOPEN,ANY,per reopen,60.00,ASSUMPTION: rework on a re-opened ticket
+WORK_ORDER,INSPECTION,per work order,650.00,ASSUMPTION: dispatch + scheduling overhead
+WORK_ORDER,REPAIR,per work order,900.00,ASSUMPTION: dispatch + parts handling
+WORK_ORDER,OTHER,per work order,800.00,ASSUMPTION: default for unknown work types
+TECH_HOUR,EMPLOYEE,per on-site hour,320.00,ASSUMPTION: in-house technician loaded rate
+TECH_HOUR,CONTRACTOR,per on-site hour,450.00,ASSUMPTION: contractor rate card
+TRAVEL,ANY,per dispatched visit,250.00,ASSUMPTION: vehicle + travel time
+CPE,REPLACED_CPE,per replacement,1800.00,ASSUMPTION: ONT/modem unit + logistics
+RESCHEDULE,RESCHEDULED,per reschedule,150.00,ASSUMPTION: wasted slot + re-dispatch

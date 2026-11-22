@@ -1,0 +1,61 @@
+version: 2
+
+seeds:
+  - name: roaming_iot_discounts
+    description: "P04. Inter-operator (IOT) discount per visited operator off the reference roaming tariff. ASSUMPTIONS for the synthetic estate -- replace with the signed IOT agreements."
+    config:
+      column_types: {iot_discount_pct: "number(5,2)"}
+    columns:
+      - name: iot_discount_pct
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [partner_operator, visited_country]}
+
+models:
+  - name: int_roaming_iot_rate_daily
+    description: "P04. Wholesale roaming (IOT) rate in force per day, MVNO brand (0 = retail median) and service group; rate card + S3 partner rate files, latest effective version via ASOF JOIN."
+    columns:
+      - name: rate_date
+        data_tests: [not_null]
+      - name: service_group
+        data_tests:
+          - accepted_values: {arguments: {values: ['ROAM_DATA', 'ROAM_VOICE', 'IDD_SMS']}}
+      - name: rate_php
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, inclusive: false}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [rate_date, partner_brand_id, service_group]}
+
+  - name: fct_roaming_margin_daily
+    description: "P04. Daily roaming retail revenue vs wholesale cost and FX check per visited country, partner operator and home region."
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: retail_revenue_php
+        description: "What subscribers were billed (PHP)."
+      - name: wholesale_cost_php
+        description: "Usage x reference tariff in force that day (brand rate for MVNO lines, median otherwise) x (1 - IOT discount of the visited operator)."
+      - name: margin_php
+        description: "retail_revenue_php - wholesale_cost_php."
+      - name: fx_variance_php
+        description: "Billed PHP minus the USD charge converted at the BSP rate in force (ASOF JOIN)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [event_date, visited_country, partner_operator, region_id]}
+
+  - name: mart_roaming_profitability_monthly
+    description: "P04. Monthly roaming scorecard per visited operator: margin, margin rank, share of month, MoM change, wholesale cost mix and profitability flag."
+    columns:
+      - name: month_start
+        data_tests: [not_null]
+      - name: profitability_flag
+        data_tests:
+          - accepted_values: {arguments: {values: ['LOSS_MAKING', 'THIN_MARGIN', 'HEALTHY']}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [month_start, visited_country, partner_operator]}

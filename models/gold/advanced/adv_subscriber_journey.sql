@@ -7,7 +7,10 @@
     transient = false,
     cluster_by = ['journey_month', 'journey_type', 'home_region_name'],
     tags = ['gold', 'advanced', 'h05', 'journey', 'churn'],
-    query_tag = 'dbt_telco_adv_h05'
+    query_tag = 'dbt_telco_adv_h05',
+    post_hook = [
+      "delete from {{ this }} t using (select journey_key, max(loaded_at) as latest from {{ this }} group by 1 having count(*) > 1) d where t.journey_key = d.journey_key and t.loaded_at < d.latest"
+    ]
   )
 }}
 {#-
@@ -25,6 +28,9 @@
     RECOVERED_FROM_SUSPEND  ACTIVE -> SUSPENDED+   -> ACTIVE
     DIRECT_CHURN            ACTIVE -> CHURNED
 
+  A journey can change its end (e.g. DIRECT_CHURN in July becomes WIN_BACK_AFTER_CHURN in
+  November when the line is won back). Months are replaced with delete+insert, so the post-hook
+  keeps only the latest version of each journey_key.
   Grain     : one row per journey (subscription_id, journey_start); journey_month = month
               the journey ended.
   Window    : every month from var('history_start_date') up to the last BSS status month;

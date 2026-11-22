@@ -15,7 +15,7 @@ with pools as (
         p.pool_id, p.region_id, p.cidr, p.pool_type, p.pool_size, p.used_count, p.gateway_ip, p.notes,
         try_parse_ip(p.cidr, 'INET')                            as cidr_obj,
         try_to_number(split_part(p.cidr, '/', 2))               as prefix_len
-    from {{ source('ext', 'ip_pool') }} p
+    from {{ source('network', 'ip_pool') }} p
 ),
 addressed as (
     select matched_pool_id as pool_id, count(*) as elements_addressed

@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: int_p10_device_price_timeline
+    description: "P10 step 1 - price observations per handset: catalogue launch price plus daily vendor price updates read from the S3 external table."
+    columns:
+      - name: price_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, inclusive: false}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['device_id', 'price_date', 'price_source']}
+
+  - name: mart_p10_device_price_trend
+    description: "P10 output 1 - lifecycle stage, price trend (REGR_SLOPE per 30 days), price change since launch and installed base per handset model."
+    columns:
+      - name: device_id
+        data_tests: [unique, not_null]
+      - name: lifecycle_stage
+        data_tests:
+          - accepted_values: {arguments: {values: ['NEW', 'MAINSTREAM', 'LEGACY', 'END_OF_LIFE']}}
+
+  - name: mart_p10_upgrade_propensity
+    description: "P10 output 2 - handset upgrade propensity per active line (logistic score over device age, 5G gap, usage growth, ARPU, contract end, churn band, price drop) with band and recommended offer."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: upgrade_propensity
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+      - name: propensity_band
+        data_tests:
+          - accepted_values: {arguments: {values: ['HIGH', 'MEDIUM', 'LOW']}}
+      - name: recommended_offer
+        data_tests:
+          - accepted_values: {arguments: {values: ['OFFER_5G_HANDSET', 'RECONTRACT_WITH_DEVICE', 'TRADE_IN_OFFER', 'NO_ACTION']}}
+
+  - name: agg_p10_device_fleet_monthly
+    description: "P10 output 3 - monthly usage, 5G data share and revenue of the handset fleet by region, manufacturer, generation and lifecycle stage (device of record = current device)."
+    columns:
+      - name: month_start
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['month_start', 'region_id', 'manufacturer', 'device_generation', 'lifecycle_stage']}

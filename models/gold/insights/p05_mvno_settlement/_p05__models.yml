@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: fct_mvno_line_monthly
+    description: "P05. One row per MVNO line and month: usage, retail revenue and the wholesale charge priced at the partner's rate in force (UNPIVOT -> ASOF JOIN -> PIVOT)."
+    columns:
+      - name: partner_brand_id
+        data_tests: [not_null]
+      - name: wholesale_charge_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [month_start, subscription_id]}
+
+  - name: fct_mvno_settlement_recon
+    description: "P05. Expected partner settlement (revenue x share %) vs the settlement system, wholesale charges, FX check and reconciliation status."
+    columns:
+      - name: recon_status
+        data_tests:
+          - not_null
+          - accepted_values: {arguments: {values: ['MATCHED', 'WITHIN_TOLERANCE', 'DISPUTE', 'NOT_SETTLED']}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [month_start, partner_brand_id]}
+
+  - name: mart_mvno_partner_scorecard
+    description: "P05. Current scorecard per MVNO partner over the last 6 complete months: base, churn, revenue trend, wholesale margin, reconciliation health, settlement timeliness."
+    columns:
+      - name: partner_brand_id
+        data_tests: [unique, not_null]
+      - name: partner_status
+        data_tests:
+          - accepted_values: {arguments: {values: ['OK', 'WATCH', 'ESCALATE']}}

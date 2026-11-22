@@ -62,7 +62,7 @@ parsed as (
 ),
 pools as (
     select pool_id, region_id, cidr, pool_type, try_parse_ip(cidr, 'INET') as pool_obj
-    from {{ source('ext', 'ip_pool') }}
+    from {{ source('network', 'ip_pool') }}
 ),
 pool_match as (
     -- which of the element's regional pools (if any) contains its IPv4 address

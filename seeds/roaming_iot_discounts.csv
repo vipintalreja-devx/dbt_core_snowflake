@@ -1,0 +1,9 @@
+partner_operator,visited_country,iot_discount_pct,assumption
+T-Mobile US,US,62.0,ASSUMPTION: bilateral IOT discount off the reference roaming tariff
+NTT Docomo,JP,58.0,ASSUMPTION: bilateral IOT discount off the reference roaming tariff
+Singtel,SG,70.0,ASSUMPTION: group/alliance partner -- deeper discount
+Etisalat,AE,52.0,ASSUMPTION: no alliance agreement -- shallow discount
+Vodafone UK,GB,66.0,ASSUMPTION: bilateral IOT discount off the reference roaming tariff
+CSL,HK,72.0,ASSUMPTION: high-traffic partner -- volume discount
+Airtel,IN,60.0,ASSUMPTION: bilateral IOT discount off the reference roaming tariff
+Telstra,AU,55.0,ASSUMPTION: bilateral IOT discount off the reference roaming tariff

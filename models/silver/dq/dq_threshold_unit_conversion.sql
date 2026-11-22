@@ -11,7 +11,7 @@
 -- Grain: threshold row x target unit.
 -- Sources (4): cell_kpi_threshold (bronze), ext.unit_conversion, slv_cell_kpi_threshold, dim_cell.
 with conv as (
-    select from_unit, to_unit, factor, offset_value from {{ source('ext', 'unit_conversion') }}
+    select from_unit, to_unit, factor, offset_value from {{ source('ref', 'unit_conversion') }}
 )
 select
     t.threshold_id,

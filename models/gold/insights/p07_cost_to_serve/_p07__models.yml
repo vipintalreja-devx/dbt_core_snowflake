@@ -1,0 +1,45 @@
+version: 2
+
+seeds:
+  - name: cost_to_serve_rates
+    description: "P07. Unit costs (PHP) used to price care activity. ASSUMPTIONS for the synthetic estate -- replace with finance's cost-to-serve rates."
+    config:
+      column_types: {cost_php: "number(12,2)"}
+    columns:
+      - name: cost_php
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [cost_type, cost_key]}
+
+models:
+  - name: int_care_cost_event
+    description: "P07. Every priced care activity (ticket, re-open, note, field work order) with its subscription and Manila business date."
+    columns:
+      - name: cost_event_id
+        data_tests: [unique, not_null]
+      - name: cost_type
+        data_tests:
+          - accepted_values: {arguments: {values: ['TICKET', 'REOPEN', 'NOTE', 'FIELD']}}
+      - name: cost_php
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+
+  - name: fct_line_cost_to_serve_monthly
+    description: "P07. Care cost (by type) vs revenue per line and month; margin after care cost, cost-to-revenue ratio, unprofitable flag."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [month_start, subscription_id]}
+
+  - name: mart_cost_to_serve_segment_monthly
+    description: "P07. Revenue, care cost by type, cost per line, p90 cost per line and share of unprofitable lines per region x plan x tenure x churn band."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [month_start, region_id, plan_category, tenure_band, churn_band]}
+
+  - name: mart_unprofitable_lines
+    description: "P07. Lines whose care cost over the last three months exceeds their revenue, with the top cost driver, loss rank in region and a suggested action."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]

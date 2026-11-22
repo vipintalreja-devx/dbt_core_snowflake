@@ -47,6 +47,8 @@ sources:
     database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
     schema: REF
     tables:
+      - name: unit_conversion
+        description: "Unit conversion factors (moved from DBT_V2_RAW.REF_UNIT_CONVERSION on 2026-11-22). Used by dq_threshold_unit_conversion, dq_unit_profile, adv_cell_anomaly."
       - name: plan_catalog
         columns:
           - name: plan_id
@@ -139,6 +141,8 @@ sources:
     database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
     schema: NETWORK
     tables:
+      - name: ip_pool
+        description: "Regional IPv4 address pools (moved from DBT_V2_RAW.NETWORK_IP_POOL on 2026-11-22). Used by dq_ip_address_validation, dq_ip_pool_utilization."
       - name: cell_site
         columns:
           - name: cell_id
@@ -185,6 +189,14 @@ sources:
       - name: device_feed_raw
       - name: partner_rate_raw
 
+  - name: native_mart
+    description: "Outputs of the platform team's native pipelines (NATIVE_PIPE N01-N40). Read-only; used only by the dbt <-> native seam test."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: NATIVE_MART
+    tables:
+      - name: n04_voice_inbox
+        description: "N04 stream capture of USAGE.CDR_VOICE (every 30 min, 7-day retention). Checked by tests/singular/assert_native_n04_matches_cdr_voice.sql."
+
   - name: s3_feeds
     description: "External tables over s3://devx-telco-native-landing/ingest/ (storage integration S3_TELCO_NATIVE): daily vendor and partner files, refreshed by S3 event notifications and by INGEST.SP_LOAD_FILES."
     database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
@@ -199,13 +211,3 @@ sources:
         description: "Vendor device catalogue / price updates, one JSON file per day (partition FEED_DATE from dt=YYYY-MM-DD)."
       - name: ext_partner_rate
         description: "MVNO partner wholesale rate files, one CSV per day (partition FEED_DATE)."
-
-  - name: ext
-    description: "Reference/network tables that exist only in the DBT_V2_RAW extract (IP pools, unit conversions)."
-    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
-    schema: DBT_V2_RAW
-    tables:
-      - name: ip_pool
-        identifier: NETWORK_IP_POOL
-      - name: unit_conversion
-        identifier: REF_UNIT_CONVERSION

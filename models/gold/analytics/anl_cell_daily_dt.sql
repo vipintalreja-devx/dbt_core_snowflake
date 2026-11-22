@@ -1,7 +1,7 @@
 {{ config(
     materialized='dynamic_table',
-    target_lag='1 hour',
-    snowflake_warehouse='COMPUTE_WH',
+    target_lag='downstream',
+    snowflake_warehouse=target.warehouse,
     refresh_mode='auto',
     tags=['gold', 'analytics', 'network', 'kpi', 'm31']
 ) }}
@@ -27,3 +27,4 @@ select
 from {{ ref('slv_cell_kpi_hourly') }} h
 join {{ ref('slv_cell_site') }} c on c.cell_id = h.cell_id
 group by 1, 2, 3, 4
+-- Dynamic table with target_lag = downstream: refreshed by the nightly dbt build (OPS.T_DBT_BUILD), not on a timer.

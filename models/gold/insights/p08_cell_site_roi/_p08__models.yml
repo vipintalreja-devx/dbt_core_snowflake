@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: int_p08_cell_traffic_daily
+    description: "P08 step 1 - voice, data and SMS traffic carried by each cell per Manila business day (from the three CDR feeds)."
+    columns:
+      - name: cell_id
+        data_tests: [not_null]
+      - name: event_date
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['cell_id', 'event_date']}
+
+  - name: int_p08_cell_revenue_monthly
+    description: "P08 step 2 - recognised revenue, lines and ARPU of the subscribers homed on each cell, per month."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['home_cell_id', 'month_start']}
+
+  - name: fct_p08_cell_monthly
+    description: "P08 step 3 - monthly economics and load per cell: home revenue, traffic, PRB p95, congestion, alarms, revenue per GB, month-over-month growth."
+    columns:
+      - name: cell_id
+        data_tests: [not_null]
+      - name: month_start
+        data_tests: [not_null]
+      - name: congested_day_share
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 1}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: ['cell_id', 'month_start']}
+
+  - name: mart_p08_site_upgrade_priority
+    description: "P08 output - capacity upgrade priority per cell: PRB runway (REGR_SLOPE over 90 days), neighbour load within 3 km, revenue at risk, priority score, national / regional rank and the recommended action."
+    columns:
+      - name: cell_id
+        data_tests: [unique, not_null]
+      - name: recommended_action
+        data_tests:
+          - accepted_values: {arguments: {values: ['NEW_SITE', 'UPGRADE_TO_5G', 'ADD_CARRIER', 'OPTIMISE', 'MONITOR']}}
+      - name: priority_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}

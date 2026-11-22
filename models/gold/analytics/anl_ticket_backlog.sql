@@ -1,7 +1,7 @@
 {{ config(
     materialized='dynamic_table',
-    target_lag='1 hour',
-    snowflake_warehouse='COMPUTE_WH',
+    target_lag='downstream',
+    snowflake_warehouse=target.warehouse,
     refresh_mode='auto',
     tags=['gold', 'analytics', 'care', 'backlog', 'm30']
 ) }}
@@ -27,3 +27,4 @@ left join {{ ref('slv_subscription') }} s on s.subscription_id = t.subscription_
 left join {{ ref('sla_policy') }} sla     on sla.priority = t.priority
 where t.is_open
 group by 1, 2, 3
+-- Dynamic table with target_lag = downstream: refreshed by the nightly dbt build (OPS.T_DBT_BUILD), not on a timer.

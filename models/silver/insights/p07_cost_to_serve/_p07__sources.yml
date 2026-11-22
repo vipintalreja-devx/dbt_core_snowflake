@@ -1,0 +1,12 @@
+version: 2
+
+# Interaction notes are only needed by the cost-to-serve pipeline (P07); NOTE_TEXT is masked
+# for DBT_ROLE and is not read -- only who wrote the note and when.
+sources:
+  - name: care_notes
+    description: "Care interaction notes (agent, team lead, technician and bot notes per ticket)."
+    database: "{{ var('bronze_database', 'TELCO_PROD_XL_V2') }}"
+    schema: CARE
+    tables:
+      - name: interaction_note
+        description: "One row per note on a ticket. AUTHOR prefix (agent_, tl_, tech_, bot_) identifies who handled it."

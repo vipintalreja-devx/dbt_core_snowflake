@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: int_invoice_collection
+    description: "P06. Collection state of every invoice: paid, credits, late fees, settlement date, days to pay, dunning reached. Last three billing months restated each run."
+    columns:
+      - name: invoice_id
+        data_tests: [unique, not_null]
+      - name: collection_state
+        data_tests:
+          - accepted_values: {arguments: {values: ['PAID_ON_TIME', 'PAID_LATE', 'OPEN_NOT_DUE', 'OVERDUE_OPEN']}}
+      - name: outstanding_php
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+
+  - name: fct_dunning_journey
+    description: "P06. Dunning journey per dunned invoice read with MATCH_RECOGNIZE: stages reached, cure and cure date, dunned-after-payment defects."
+    columns:
+      - name: invoice_id
+        data_tests: [unique, not_null]
+      - name: max_stage
+        data_tests:
+          - accepted_values: {arguments: {values: [1, 2, 3], quote: false}}
+
+  - name: mart_collections_cure_monthly
+    description: "P06. Cure funnel per billing month, dunning stage (0 = all invoices) and region: invoices, cured at stage, cure rate, days to cure, outstanding, late fees."
+    columns:
+      - name: dunning_stage
+        data_tests:
+          - accepted_values: {arguments: {values: [0, 1, 2, 3], quote: false}}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [billing_month, dunning_stage, region_id]}
+
+  - name: mart_collections_risk_segment
+    description: "P06. Payment-risk score (0-100) and LOW / MEDIUM / HIGH / CRITICAL segment per billed account over the last six billing months."
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: risk_score
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100}}
+      - name: risk_segment
+        data_tests:
+          - accepted_values: {arguments: {values: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']}}
