@@ -1,0 +1,140 @@
+-- =============================================================================
+-- 16_step_notifications.sql -- one Slack message per finished step: what ran, how long, what runs next.
+-- Each OPS task body is wrapped: run the original statement, post '🔹 <step> done in Ns -> next: ...'
+-- (with the step's own summary); on error post '❌ <step> failed: <reason>' and re-raise, so the graph
+-- behaves exactly as before. STARTED / COMPLETED / FAILED come from T_ROOT / T_FINALIZE (15_*.sql).
+-- Tasks can only be modified while the root is suspended.
+-- =============================================================================
+USE ROLE DBT_ROLE;
+USE DATABASE TELCO_PROD_XL_V2;
+
+CREATE OR REPLACE PROCEDURE OPS.SP_NOTIFY_STEP(STEP VARCHAR, STATUS VARCHAR, SECS NUMBER, NEXT_STEP VARCHAR, DETAIL VARCHAR)
+RETURNS VARCHAR
+LANGUAGE SQL
+COMMENT = 'Posts one telco_daily step result to Slack (DONE -> next step, or FAILED + reason); never fails the caller'
+EXECUTE AS CALLER
+AS
+$$
+DECLARE
+  msg VARCHAR;
+  dur VARCHAR;
+BEGIN
+  dur := IFF(:SECS >= 120, ROUND(:SECS / 60, 1) || ' min', :SECS || ' s');
+  IF (:STATUS = 'DONE') THEN
+    msg := ':small_blue_diamond: telco_daily *' || :STEP || '* done in ' || dur || '  ->  next: *' || COALESCE(:NEXT_STEP, '-') || '*';
+  ELSE
+    msg := ':x: telco_daily *' || :STEP || '* FAILED after ' || dur;
+  END IF;
+  IF (:DETAIL IS NOT NULL AND :DETAIL <> '') THEN
+    msg := msg || '\n' || LEFT(REGEXP_REPLACE(:DETAIL, '\\x1b\\[[0-9;]*m', ''), 400);
+  END IF;
+  msg := REPLACE(REPLACE(REPLACE(msg, '\\', '\\\\'), '"', '\''), '\n', '\\n');
+  CALL SYSTEM$SEND_SNOWFLAKE_NOTIFICATION(
+         SNOWFLAKE.NOTIFICATION.TEXT_PLAIN(:msg),
+         SNOWFLAKE.NOTIFICATION.INTEGRATION('TELCO_SLACK'));
+  RETURN 'notified';
+EXCEPTION
+  WHEN OTHER THEN
+    RETURN 'notification failed (pipeline unaffected): ' || SQLERRM;
+END;
+$$;
+
+ALTER TASK OPS.T_ROOT SUSPEND;
+
+ALTER TASK OPS.T_INGEST MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  CALL INGEST.SP_INGEST_DAY(DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE)) INTO :r;
+  CALL OPS.SP_NOTIFY_STEP('T_INGEST', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'T_LOAD_FILES', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_INGEST', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_LOAD_FILES MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  CALL INGEST.SP_LOAD_FILES(DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE)) INTO :r;
+  CALL OPS.SP_NOTIFY_STEP('T_LOAD_FILES', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'T_NATIVE + T_FRESHNESS (in parallel)', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_LOAD_FILES', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_NATIVE MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  CALL OPS.SP_RUN_NATIVE(DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE)) INTO :r;
+  CALL OPS.SP_NOTIFY_STEP('T_NATIVE', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'T_DBT_BUILD (after T_FRESHNESS)', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_NATIVE', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_FRESHNESS MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  EXECUTE DBT PROJECT OPS.TELCO_DBT ARGS = 'source freshness --target prod'; r := 'all source feeds fresh';
+  CALL OPS.SP_NOTIFY_STEP('T_FRESHNESS', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'T_DBT_BUILD (after T_NATIVE)', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_FRESHNESS', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_DBT_BUILD MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  EXECUTE DBT PROJECT OPS.TELCO_DBT ARGS = 'build --target prod'; r := 'silver, snapshots, gold, tests: success';
+  CALL OPS.SP_NOTIFY_STEP('T_DBT_BUILD', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'T_QA', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_DBT_BUILD', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_QA MODIFY AS
+EXECUTE IMMEDIATE $$
+DECLARE
+  t0 TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP();
+  r VARCHAR DEFAULT '';
+BEGIN
+  CALL OPS.SP_QA_CHECKS(DATEADD('day', -1, CONVERT_TIMEZONE('Asia/Manila', CURRENT_TIMESTAMP())::DATE)) INTO :r;
+  CALL OPS.SP_NOTIFY_STEP('T_QA', 'DONE', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), 'finalizer (COMPLETED / FAILED summary)', :r);
+  RETURN r;
+EXCEPTION
+  WHEN OTHER THEN
+    CALL OPS.SP_NOTIFY_STEP('T_QA', 'FAILED', DATEDIFF('second', :t0, CURRENT_TIMESTAMP()), NULL, SQLERRM);
+    RAISE;
+END;
+$$;
+
+ALTER TASK OPS.T_ROOT RESUME;

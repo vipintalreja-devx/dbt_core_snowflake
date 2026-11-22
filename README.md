@@ -721,6 +721,9 @@ the schema itself was dropped on 2026-11-22 (nothing in dbt or the native pipeli
   messages. Integration `TELCO_SLACK` (webhook), secret `OPS.SLACK_TELCO_WEBHOOK` (webhook path kept only in
   Snowflake), notifier `OPS.SP_NOTIFY_PIPELINE` — it can never fail the pipeline. Delivery log:
   `INFORMATION_SCHEMA.NOTIFICATION_HISTORY`.
+* **Per-step progress** (`ops/sql/16_step_notifications.sql`): one message per finished step —
+  `🔹 <step> done in Ns -> next: <step>` with the step's own summary (rows ingested, files loaded, QA result),
+  or `❌ <step> FAILED after Ns` + reason. Each task body wraps its original statement; the graph behaves as before.
 * **Failure is loud**: after logging, `T_FINALIZE` raises when any task failed, so task history shows FAILED.
 * **Is gold current?** `OPS.V_PIPELINE_STATUS` (latest run, failures, last clean run, `IS_GOLD_CURRENT`).
   The BI refresh procedures read it first and tag every dashboard query `bi:<tool>:<dashboard>|data=current|stale`.

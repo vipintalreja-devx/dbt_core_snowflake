@@ -492,7 +492,7 @@ def run(session, d):
     def loaded(p, tbl):
         r = session.sql(f"""select coalesce(sum(row_count), 0), count(*), coalesce(count_if(status <> 'Loaded'), 0)
                               from table(TELCO_PROD_XL_V2.information_schema.copy_history(
-                                   table_name => 'TELCO_PROD_XL_V2.{tbl}', start_time => dateadd('hour', -12, '{start}'::timestamp_ltz)))
+                                   table_name => 'TELCO_PROD_XL_V2.{tbl}', start_time => dateadd('day', -7, '{start}'::timestamp_ltz)))
                              where endswith(pipe_name, '{p}') and startswith(file_name, '{d}/{run_id}/')""").collect()[0]
         return int(r[0] or 0), int(r[1] or 0), int(r[2] or 0)
     expected = {}
