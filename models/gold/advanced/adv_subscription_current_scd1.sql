@@ -7,7 +7,8 @@
     on_schema_change = 'sync_all_columns',
     cluster_by = ['status', 'region_name'],
     post_hook = [
-      "delete from {{ this }} where subscription_id in (select subscription_id from {{ ref('slv_subscription') }} where is_deleted)"
+      "delete from {{ this }} where subscription_id in (select subscription_id from {{ ref('slv_subscription') }} where is_deleted)",
+      "{{ msisdn_mask_apply(['msisdn']) }}"
     ],
     tags = ['gold', 'advanced', 'h16', 'cdc', 'scd1', 'subscriber'],
     query_tag = 'dbt_telco_h16'

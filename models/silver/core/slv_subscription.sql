@@ -2,7 +2,8 @@
     materialized='table',
     schema='silver',
     tags=['silver', 'core'],
-    transient=true
+    transient=true,
+    post_hook=["{{ msisdn_mask_apply(['msisdn']) }}"]
 ) }}
 -- Current state of every line. Soft-deleted lines and lines owned by test customers
 -- are kept but flagged; gold reporting filters on is_reportable.

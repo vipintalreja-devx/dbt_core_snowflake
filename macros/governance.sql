@@ -48,3 +48,12 @@
      where not exists (select 1 from {{ target.database }}.GOV.REGION_ACCESS_MAP m
                         where m.role_name = s.role_name and m.region_name = s.region_name)
 {%- endmacro %}
+
+
+{#- R66: keep MSISDN columns masked for non-PII roles after dbt rebuilds them.
+    dbt CREATE OR REPLACE drops attached policies, so re-apply on every build (FORCE replaces). -#}
+{% macro msisdn_mask_apply(cols) -%}
+    {%- for c in cols -%}
+    alter table {{ this }} modify column {{ c }} set masking policy {{ target.database }}.GOV.MP_MSISDN force{{ ';' if not loop.last }}
+    {% endfor -%}
+{%- endmacro %}

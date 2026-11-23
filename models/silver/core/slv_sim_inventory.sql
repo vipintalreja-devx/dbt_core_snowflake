@@ -2,7 +2,8 @@
     materialized='table',
     schema='silver',
     tags=['silver', 'core'],
-    transient=true
+    transient=true,
+    post_hook=["{{ msisdn_mask_apply(['msisdn']) }}"]
 ) }}
 -- SIM stock. AUTH_KEY (Ki) is a network secret and is deliberately NOT propagated.
 select
